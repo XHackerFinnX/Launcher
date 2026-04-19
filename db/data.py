@@ -1,21 +1,33 @@
 import os
 import shutil
+import logging
 import eel
 import requests
 
 from db.database import create_connection
 from utils.config import minecraft_directory, VERSIONS_LAUNCHER
+from utils.validators import is_valid_login, is_valid_server_address
 
 db_path = r"C:\.stoneworld\db\launcher.db"
+log_path = r"C:\.stoneworld\logs\launcher.log"
+REQUEST_TIMEOUT = (5, 20)
+logger = logging.getLogger(__name__)
 
 @eel.expose
 def insert_version(version):
     """Добавление новой версии в таблицу."""
+    version = str(version).strip()
+    if not version:
+        return False
     conn = create_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute('''INSERT INTO versions (version) VALUES (?)''', (version,))
+    cursor.execute(
+        '''INSERT OR IGNORE INTO versions (version) VALUES (?)''',
+        (version,)
+    )
     conn.commit()
     conn.close()
+    return True
 
 @eel.expose
 def get_versions():
@@ -30,11 +42,15 @@ def get_versions():
 @eel.expose
 def insert_account(login):
     """Добавление нового аккаунта в таблицу."""
+    if not is_valid_login(login):
+        logger.warning("Отклонен некорректный логин: %s", login)
+        return False
     conn = create_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute('''INSERT INTO accounts (login) VALUES (?)''', (login,))
+    cursor.execute('''INSERT OR IGNORE INTO accounts (login) VALUES (?)''', (login,))
     conn.commit()
     conn.close()
+    return True
 
 @eel.expose
 def delete_account(login):
@@ -58,6 +74,9 @@ def get_accounts():
 @eel.expose
 def update_account_version(login, version):
     """Обновление выбора логина и версии для следущего захода в лаунчер"""
+    if not is_valid_login(login):
+        logger.warning("Попытка выбрать некорректный логин: %s", login)
+        return False
     conn = create_connection(db_path)
     cursor = conn.cursor()
     # Аккаунт
@@ -71,6 +90,7 @@ def update_account_version(login, version):
     cursor.execute('''UPDATE versions SET choose = 1 WHERE version = ?''', (version,))
     conn.commit()
     conn.close()
+    return True
     
 @eel.expose
 def get_account_version():
@@ -189,10 +209,14 @@ def delete_versions_list(version):
     
 @eel.expose
 def check_server_info(ip):
+    ip = str(ip).strip()
+    if not is_valid_server_address(ip):
+        logger.warning("Отклонен некорректный адрес сервера: %s", ip)
+        return None
     url = f"https://api.mcstatus.io/v2/status/java/{ip}"
     
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=REQUEST_TIMEOUT)
         if response.status_code == 200:
             data = response.json()
             
@@ -209,9 +233,8 @@ def check_server_info(ip):
                 "status": status,
                 "icon": data['icon']
             }
-            try:
-                check_ip_address(ip)
-            except:
+            exists = check_ip_address(ip)
+            if not exists:
                 add_ip_address(ip)
                 
             return server_info
@@ -219,6 +242,7 @@ def check_server_info(ip):
         else:
             return None
     except requests.exceptions.RequestException:
+        logger.exception("Ошибка запроса статуса сервера: %s", ip)
         return None
     
 @eel.expose
@@ -321,7 +345,7 @@ def check_ip_address(ip_address):
     cursor.execute('''SELECT ip FROM servers WHERE ip = ?''', (ip_address,))
     server = cursor.fetchone()
     conn.close()
-    return server[0]
+    return server[0] if server else None
 
 def add_time(date, hour):
     conn = create_connection(db_path)
@@ -345,20 +369,18 @@ def check_version_launcher():
         "https": None
     }
     
-    response = requests.get(url=url_version, proxies=proxies)
-    json_data = response.json()
     try:
-        launcher_version = launcher[0][0]
-    except:
-        try:
-            launcher_version = launcher[0]
-        except:
-            launcher_version = launcher
+        response = requests.get(
+            url=url_version, proxies=proxies, timeout=REQUEST_TIMEOUT
+        )
+        response.raise_for_status()
+        json_data = response.json()
+        launcher_version = launcher[0][0] if launcher else None
 
-    if launcher_version == json_data['version']:
+        return launcher_version != json_data['version']
+    except requests.exceptions.RequestException:
+        logger.exception("Не удалось проверить версию лаунчера")
         return False
-    else:
-        return True
     
 def start_check_version_launcher():
     conn = create_connection(db_path)
@@ -375,9 +397,14 @@ def start_check_version_launcher():
 def update_last_version_launcher():
     
     url_version = "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/launcher.json"
-    response = requests.get(url_version)
-    json_data = response.json()
-    version = json_data['version']
+    try:
+        response = requests.get(url_version, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        json_data = response.json()
+        version = json_data['version']
+    except requests.exceptions.RequestException:
+        logger.exception("Не удалось обновить версию лаунчера")
+        return
     
     conn = create_connection(db_path)
     cursor = conn.cursor()
@@ -391,3 +418,26 @@ def add_version_launcher():
     cursor.execute('''INSERT INTO launcher (version) VALUES (?)''', (VERSIONS_LAUNCHER,))
     conn.commit()
     conn.close()
+    
+@eel.expose
+def read_launcher_logs(position=0, chunk_size=32768):
+    try:
+        position = int(position or 0)
+        chunk_size = int(chunk_size or 32768)
+    except (ValueError, TypeError):
+        position = 0
+        chunk_size = 32768
+
+    if not os.path.exists(log_path):
+        return {"text": "", "position": 0}
+
+    file_size = os.path.getsize(log_path)
+    if position > file_size:
+        position = 0
+
+    with open(log_path, "r", encoding="utf-8", errors="ignore") as file:
+        file.seek(position)
+        text = file.read(chunk_size)
+        new_position = file.tell()
+
+    return {"text": text, "position": new_position}

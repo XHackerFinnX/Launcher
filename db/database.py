@@ -68,3 +68,34 @@ def create_table_versions_launcher(conn):
         conn.commit()
     except sqlite3.Error as e:
         print(f"Ошибка при создании таблицы launcher: {e}")
+
+
+def apply_migrations(conn):
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA user_version")
+    version = cursor.fetchone()[0]
+
+    if version < 1:
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_versions_version ON versions(version)"
+        )
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_login ON accounts(login)"
+        )
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_servers_ip ON servers(ip)"
+        )
+        cursor.execute("PRAGMA user_version = 1")
+        conn.commit()
+
+
+def init_database(db_file):
+    conn = create_connection(db_file)
+    create_table_versions(conn)
+    create_table_accounts(conn)
+    create_table_settings(conn)
+    create_table_server(conn)
+    create_table_time(conn)
+    create_table_versions_launcher(conn)
+    apply_migrations(conn)
+    conn.close()

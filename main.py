@@ -1,8 +1,11 @@
+import logging
 import eel
 
+from db.database import init_database
 from db.data import start_check_version_launcher, add_version_launcher
 from utils.browser import find_browser, find_free_port
 from utils.folder import download_java, get_center_position
+from utils.logger import setup_logging
 
 from utils.download import downolad_launcher_version, minecraft_download_version, minecraft_download_version_build
 from utils.game import start_game, check_close
@@ -16,6 +19,8 @@ from db.data import (
 )
 
 def main():
+    setup_logging()
+    init_database(r"C:\.stoneworld\db\launcher.db")
     eel.init('web')
         
     file_html = 'main.html'
@@ -34,7 +39,16 @@ def main():
     browser = find_browser()
     pos_x, pos_y = get_center_position(width, height)
     
-    eel.start(file_html, mode=browser, port=0, size=(width, height), position=(pos_x, pos_y))
+    try:
+        eel.start(
+            file_html,
+            mode=browser,
+            port=0,
+            size=(width, height),
+            position=(pos_x, pos_y),
+        )
+    except KeyboardInterrupt:
+        logging.getLogger(__name__).info("Launcher stopped by user (KeyboardInterrupt).")
 
 if __name__ == '__main__':
     main()

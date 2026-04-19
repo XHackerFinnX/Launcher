@@ -1,13 +1,11 @@
 import os
 import shutil
 import subprocess
-import sys
-import time
+import hashlib
+import logging
 import minecraft_launcher_lib
 import eel
-import psutil
 import requests
-import shutil
 
 from utils.config import minecraft_directory, version_optifine
 from db.data import delete_version_error
@@ -16,9 +14,12 @@ from utils.mods_download import download_client_lunar_pvp_1_8_9, download_mods_p
 
 current_max = 0
 current_progress = 0
+REQUEST_TIMEOUT = (5, 60)
+logger = logging.getLogger(__name__)
 
 def set_status(status: str):
-    pass
+    if status:
+        logger.info("Install status: %s", status)
 
 def set_progress(progress: int):
     global current_progress
@@ -45,8 +46,10 @@ callback = {
 def minecraft_download_version(version: str):
     minecraft_directory_version = minecraft_directory + f"\\{version}"
     if not os.path.exists(minecraft_directory_version):
-        minecraft_launcher_lib.install.install_minecraft_version(versionid=version, minecraft_directory=minecraft_directory_version, callback=callback)
-
+        logger.info("Начало установки Minecraft версии: %s", version)
+        minecraft_launcher_lib.install.install_minecraft_version(version=version, minecraft_directory=minecraft_directory_version, callback=callback)
+        logger.info("Minecraft версия установлена: %s", version)
+        
 
 @eel.expose
 def minecraft_download_version_build(version_fabric_forge: str):
@@ -56,6 +59,7 @@ def minecraft_download_version_build(version_fabric_forge: str):
     
     if not os.path.exists(minecraft_directory_version):
         try:
+            logger.info("Начало установки сборки: %s", version_fabric_forge)
             if name.startswith('Forge'):
                 version = minecraft_launcher_lib.forge.find_forge_version(version_null)
                 minecraft_launcher_lib.forge.install_forge_version(
@@ -89,8 +93,10 @@ def minecraft_download_version_build(version_fabric_forge: str):
                 download_resourcepacks_pvp_1_8_9(version_fabric_forge)
                 download_options_pvp_1_8_9(version_fabric_forge)
                 download_client_lunar_pvp_1_8_9(version_fabric_forge)
+            logger.info("Сборка установлена: %s", version_fabric_forge)
         
-        except:
+        except Exception:
+            logger.exception("Ошибка при установке сборки %s", version_fabric_forge)
             if os.path.exists(minecraft_directory_version):
                 shutil.rmtree(minecraft_directory_version)
             delete_version_error(version_fabric_forge)
@@ -106,7 +112,13 @@ def downolad_wget(url_file, name_file, url_folder):
         "https": None
     }
     
-    response = requests.get(url=url_file, headers=headers, proxies=proxies, stream=True)
+    response = requests.get(
+        url=url_file,
+        headers=headers,
+        proxies=proxies,
+        stream=True,
+        timeout=REQUEST_TIMEOUT
+    )
     try:
         if response.status_code == 200:
             with open(name_file, 'wb') as f:
@@ -115,20 +127,49 @@ def downolad_wget(url_file, name_file, url_folder):
             shutil.move(f"./{name_file}", url_folder)
         else:
             print(f"Ошибка при загрузке файла: {response.status_code}")
-    except:
-        pass
+    except Exception:
+        logger.exception("Ошибка при загрузке файла %s", url_file)
+        return False
     
-    return
+    return True
+
+def _sha256(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as file:
+        for chunk in iter(lambda: file.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_updater_binary(exe_path: str, checksum_path: str) -> bool:
+    if not os.path.exists(exe_path) or not os.path.exists(checksum_path):
+        return False
+
+    with open(checksum_path, "r", encoding="utf-8") as file:
+        expected = file.read().strip().split()[0].lower()
+
+    actual = _sha256(exe_path)
+    if actual != expected:
+        logger.error("Checksum mismatch for updater. expected=%s actual=%s", expected, actual)
+        return False
+    return True
 
 @eel.expose
 def downolad_launcher_version():
     exe_path = r"C:\.stoneworld\access\SLupdate.exe"
+    checksum_path = r"C:\.stoneworld\access\SLupdate.sha256"
 
     if os.path.exists(exe_path):
+        if not verify_updater_binary(exe_path, checksum_path):
+            logger.error("Файл обновления не прошел проверку контрольной суммы")
+            return False
         subprocess.Popen([exe_path], shell=True)
         close_app_exe()
+        return True
     else:
         print("Файл не найден:", exe_path)
+        logger.error("Файл обновления не найден: %s", exe_path)
+        return False
         
 def close_app_exe():
     """Закрывает приложение EEL"""

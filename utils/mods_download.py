@@ -1,8 +1,11 @@
 import os
 import time
 import zipfile
+import logging
 import requests
 
+REQUEST_TIMEOUT = (5, 60)
+logger = logging.getLogger(__name__)
 
 def download_zip(url, save_folder, filename):
     """Функция скачивания файла zip"""
@@ -13,19 +16,22 @@ def download_zip(url, save_folder, filename):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
     }
     
-    response = requests.get(url, headers=headers, stream=True)
-    
-    if response.status_code == 200:
-        with open(file_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-        
-        print(f'{filename} загружен')
-        time.sleep(1)
-        return True
-    else:
-        print(f"Ошибка при загрузке {filename}: {response.status_code}")
+    try:
+        response = requests.get(url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT)
+        if response.status_code == 200:
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+
+            print(f'{filename} загружен')
+            time.sleep(1)
+            return True
+
+        logger.error("Ошибка при загрузке %s: %s", filename, response.status_code)
+        return False
+    except requests.exceptions.RequestException:
+        logger.exception("Сетевая ошибка при загрузке %s", filename)
         return False
     
 

@@ -1,25 +1,46 @@
 import json
 import os
-import re
 import time
 import minecraft_launcher_lib
 import subprocess
 import eel
 import threading
+import logging
 
 from uuid import uuid1
 from db.data import get_memory, get_checkbox, get_bit_optimiz_argument
 from utils.config import minecraft_directory, CREATE_NO_WINDOW
 
-error_start = 0
+logger = logging.getLogger(__name__)
+
+STATE_IDLE = "idle"
+STATE_STARTING = "starting"
+STATE_RUNNING = "running"
+STATE_FAILED = "failed"
+
+_launch_state = STATE_IDLE
+_launch_error = ""
+_state_lock = threading.Lock()
+
+
+def _set_state(state: str, error: str = ""):
+    global _launch_state, _launch_error
+    with _state_lock:
+        _launch_state = state
+        _launch_error = error
+
+
+def _get_state():
+    with _state_lock:
+        return _launch_state, _launch_error
 
 def run_minecraft(login: str, version: str, server: str):
-    global error_start
-    error_start = 0
+    _set_state(STATE_STARTING)
+    logger.info("Запуск Minecraft: login=%s version=%s server=%s", login, version, server or "-")
     try:
         options = {
             'username': login,
-            'uuid': str(uuid1),
+            'uuid': str(uuid1()),
             'token': '1234322354543342'
         }
         bit_checkbox, optimiz_checkbox, argument = get_bit_optimiz_argument()
@@ -91,37 +112,50 @@ def run_minecraft(login: str, version: str, server: str):
             minecraft_directory=minecraft_directory_version,
             options=options
         )
-        subprocess.call(command, creationflags=CREATE_NO_WINDOW)
+        _set_state(STATE_RUNNING)
+        code = subprocess.call(command, creationflags=CREATE_NO_WINDOW)
+        if code != 0:
+            _set_state(STATE_FAILED, f"Minecraft exited with code {code}")
+            logger.error("Minecraft завершился с ошибкой. code=%s version=%s", code, version)
+            return
+        logger.info("Minecraft завершился штатно. version=%s", version)
         try:
             checkbox = get_checkbox()
             if checkbox == 0:
                 time.sleep(4)
                 eel.updatePlaytimeOnPage()
-        except:
-            pass
-    except:
-        error_start = 1
+        except Exception:
+            logger.exception("Не удалось обновить время игры в UI")
+    except Exception as error:
+        logger.exception("Ошибка запуска Minecraft")
+        _set_state(STATE_FAILED, str(error))
         
 
 @eel.expose
 def start_game(login: str, version: str, server: str):
-    global error_start
-
+    _set_state(STATE_STARTING)
+    logger.info("Получен запрос на запуск игры")
     threading.Thread(target=run_minecraft, args=(login, version, server)).start()
     
     progress = 0
-    while progress < 100:
+    attempts = 0
+    while progress < 100 and attempts < 120:
         time.sleep(0.5)
+        attempts += 1
         progress += 10
-        if error_start == 0:
-            eel.updateProgressDownload(progress)
-        else:
-            break
-        
-    if error_start == 0:
-        pass
-    else:
-        raise
+        state, error = _get_state()
+        if state == STATE_FAILED:
+            raise RuntimeError(error or "Ошибка запуска игры")
+
+        eel.updateProgressDownload(min(progress, 95))
+        if state == STATE_RUNNING:
+            eel.updateProgressDownload(100)
+            return True
+
+    state, error = _get_state()
+    if state != STATE_RUNNING:
+        raise RuntimeError(error or "Таймаут запуска игры")
+    return True
         
 
 @eel.expose

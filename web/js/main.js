@@ -61,17 +61,17 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // Управление поведением лаунчера
     const radioButtons = document.querySelectorAll(
-        'input[name="launcher-behavior"]'
+        'input[name="launcher-behavior"]',
     );
 
     // Устанавливаем поведение лаунчера в зависимости от настройки
     if (settings.checkbox === 0) {
         document.querySelector(
-            'input[name="launcher-behavior"][value="keep-open"]'
+            'input[name="launcher-behavior"][value="keep-open"]',
         ).checked = true;
     } else if (settings.checkbox === 1) {
         document.querySelector(
-            'input[name="launcher-behavior"][value="close"]'
+            'input[name="launcher-behavior"][value="close"]',
         ).checked = true;
     }
 
@@ -198,7 +198,7 @@ async function updateVersionList() {
     const versionSelect = document.getElementById("version-select-list");
     const installedVersions = await eel.get_versions()();
     const installedVersionsSet = new Set(
-        installedVersions.map((version) => version[1])
+        installedVersions.map((version) => version[1]),
     );
 
     // Очищаем текущий список
@@ -217,7 +217,7 @@ async function updateVersionFolderList() {
     const versionSelect = document.getElementById("version-select-folder");
     const installedVersions = await eel.get_versions()();
     const installedVersionsSet = new Set(
-        installedVersions.map((version) => version[1])
+        installedVersions.map((version) => version[1]),
     );
 
     versionSelect.innerHTML = '<option value="">Выберите версию</option>';
@@ -284,6 +284,55 @@ const playBtn = document.querySelector(".play-btn");
 const downloadButtons = document.querySelectorAll(".download-btn");
 let installedVersions = new Set();
 let isDownloading = false;
+let logPollTimer = null;
+let logPosition = 0;
+
+function showRuntimeLogsModal() {
+    const modal = document.getElementById("runtimeLogModal");
+    if (!modal) return;
+    modal.style.display = "flex";
+}
+
+function hideRuntimeLogsModal() {
+    const modal = document.getElementById("runtimeLogModal");
+    if (!modal) return;
+    modal.style.display = "none";
+    if (logPollTimer) {
+        clearInterval(logPollTimer);
+        logPollTimer = null;
+    }
+}
+
+async function pollLauncherLogs() {
+    try {
+        const response = await eel.read_launcher_logs(logPosition, 32768)();
+        if (!response) return;
+        const output = document.getElementById("runtimeLogContent");
+        if (!output) return;
+        if (response.text) {
+            output.textContent += response.text;
+            output.scrollTop = output.scrollHeight;
+        }
+        logPosition = response.position || logPosition;
+    } catch (error) {
+        console.error("Ошибка чтения логов лаунчера:", error);
+    }
+}
+
+function startLauncherLogsStreaming(reset = false) {
+    showRuntimeLogsModal();
+    const output = document.getElementById("runtimeLogContent");
+    if (!output) return;
+    if (reset) {
+        output.textContent = "";
+        logPosition = 0;
+    }
+    if (logPollTimer) {
+        clearInterval(logPollTimer);
+    }
+    pollLauncherLogs();
+    logPollTimer = setInterval(pollLauncherLogs, 800);
+}
 
 function toggleDownloadButtons(disable) {
     downloadButtons.forEach((btn) => {
@@ -330,6 +379,73 @@ function closeAlertGame() {
 
 function closeAlertServer() {
     document.getElementById("customAlertServer").style.display = "none";
+}
+
+function isValidLogin(login) {
+    return /^[A-Za-z0-9_]{3,16}$/.test(login);
+}
+
+function isValidServerAddress(value) {
+    return /^(([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+|\d{1,3}(\.\d{1,3}){3})(:\d{1,5})?$/.test(
+        value,
+    );
+}
+
+function createServerCard(serverData, onDelete) {
+    const serverCard = document.createElement("div");
+    serverCard.classList.add("server-card");
+
+    const image = document.createElement("img");
+    image.className = "server-card-image";
+    image.alt = serverData.name || "Minecraft server";
+    if (
+        typeof serverData.icon === "string" &&
+        serverData.icon.startsWith("https://")
+    ) {
+        image.src = serverData.icon;
+    } else {
+        image.src = "";
+    }
+
+    const serverInfo = document.createElement("div");
+    serverInfo.className = "server-info";
+
+    const title = document.createElement("div");
+    title.className = "server-title";
+    title.textContent = serverData.name || "Unknown";
+
+    const statusRow = document.createElement("div");
+    statusRow.className = "server-status";
+
+    const playerCount = document.createElement("div");
+    playerCount.className = "player-count";
+    playerCount.textContent = `${serverData.players_online} игроков`;
+
+    const status = document.createElement("div");
+    status.className = `status ${String(serverData.status || "").toLowerCase()}`;
+    status.textContent = serverData.status || "Unknown";
+
+    statusRow.appendChild(playerCount);
+    statusRow.appendChild(status);
+    serverInfo.appendChild(title);
+    serverInfo.appendChild(statusRow);
+
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "delete-server-btn";
+    const deleteIcon = document.createElement("i");
+    deleteIcon.className = "fas fa-trash-alt";
+    deleteButton.appendChild(deleteIcon);
+    deleteButton.addEventListener("click", onDelete);
+
+    const ipNode = document.createElement("div");
+    ipNode.className = "ip-address";
+    ipNode.textContent = serverData.ip;
+
+    serverCard.appendChild(image);
+    serverCard.appendChild(serverInfo);
+    serverCard.appendChild(deleteButton);
+    serverCard.appendChild(ipNode);
+    return serverCard;
 }
 
 async function updateVersionSelect() {
@@ -404,11 +520,12 @@ playBtn.addEventListener("click", async () => {
             "запуск игры",
             selectedLogin,
             selectedVersion,
-            selectedServer
+            selectedServer,
         );
         const circularProgress = document.querySelector(".circular-progress");
 
         isDownloading = true;
+        startLauncherLogsStreaming(false);
         circularProgress.classList.add("active");
         toggleDownloadButtons(true);
         playBtn.disabled = true;
@@ -446,7 +563,7 @@ async function checkWebSocketConnection() {
         eel._websocket.readyState === WebSocket.CONNECTING
     ) {
         console.warn(
-            "WebSocket ещё соединяется... Пробуем снова через 1 секунду."
+            "WebSocket ещё соединяется... Пробуем снова через 1 секунду.",
         );
         setTimeout(checkWebSocketConnection, 1000); // Пробуем снова через секунду
     } else {
@@ -463,14 +580,14 @@ async function reconnectEelPlay() {
 
             // Перезагрузка страницы для переподключения WebSocket
             eel._websocket = new WebSocket(
-                `http://${window.location.host}/main.html`
+                `http://${window.location.host}/main.html`,
             ); // Создаем новое подключение
         } else if (
             eel._websocket &&
             eel._websocket.readyState === WebSocket.CONNECTING
         ) {
             console.warn(
-                "WebSocket ещё соединяется... Пробуем снова через 1 секунду."
+                "WebSocket ещё соединяется... Пробуем снова через 1 секунду.",
             );
             setTimeout(reconnectEelPlay, 1000); // Пробуем снова через секунду
         } else {
@@ -488,55 +605,31 @@ document
         const ipInput = document.getElementById("server-ip");
         const ip = ipInput.value.trim();
 
-        if (ip) {
+        if (ip && isValidServerAddress(ip)) {
             try {
                 const serverData = await eel.check_server_info(ip)();
 
                 if (serverData) {
                     const serverList = document.getElementById("server-list");
-                    const serverCard = document.createElement("div");
-                    serverCard.classList.add("server-card");
-
-                    serverCard.innerHTML = `
-                <img class="server-card-image" src="${serverData.icon}" alt="${
-                        serverData.name
-                    }">
-                    <div class="server-info">
-                        <div class="server-title">${serverData.name}</div>
-                        <div class="server-status">
-                            <div class="player-count">${
-                                serverData.players_online
-                            } игроков</div>
-                            <div class="status ${serverData.status.toLowerCase()}">${
-                        serverData.status
-                    }</div>
-                        </div>
-                    </div>
-                    <button class="delete-server-btn">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                    <div class="ip-address">${serverData.ip}</div>
-                `;
-
+                    const serverCard = createServerCard(
+                        serverData,
+                        async function () {
+                            try {
+                                await eel.delete_server_by_ip(serverData.ip)();
+                                serverList.removeChild(serverCard);
+                                updateServerSelect();
+                            } catch (error) {
+                                console.error(
+                                    "Ошибка при удалении сервера:",
+                                    error,
+                                );
+                            }
+                        },
+                    );
                     serverList.appendChild(serverCard);
 
                     ipInput.value = "";
                     updateServerSelect();
-                    const deleteButton =
-                        serverCard.querySelector(".delete-server-btn");
-                    deleteButton.addEventListener("click", async function () {
-                        try {
-                            console.log(serverData.ip);
-                            await eel.delete_server_by_ip(serverData.ip)();
-                            serverList.removeChild(serverCard);
-                            updateServerSelect();
-                        } catch (error) {
-                            console.error(
-                                "Ошибка при удалении сервера:",
-                                error
-                            );
-                        }
-                    });
                 } else {
                     showAlertServer();
                 }
@@ -557,47 +650,26 @@ async function getIpAddress() {
             const serverData = await eel.check_server_info(ip)();
             if (serverData) {
                 const serverList = document.getElementById("server-list");
-                const serverCard = document.createElement("div");
-                serverCard.classList.add("server-card");
-
-                serverCard.innerHTML = `
-                <img class="server-card-image" src="${serverData.icon}" alt="${
-                    serverData.name
-                }">
-                    <div class="server-info">
-                        <div class="server-title">${serverData.name}</div>
-                        <div class="server-status">
-                            <div class="player-count">${
-                                serverData.players_online
-                            } игроков</div>
-                            <div class="status ${serverData.status.toLowerCase()}">${
-                    serverData.status
-                }</div>
-                        </div>
-                    </div>
-                    <button class="delete-server-btn">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                    <div class="ip-address">${serverData.ip}</div>
-                `;
-
+                const serverCard = createServerCard(
+                    serverData,
+                    async function () {
+                        try {
+                            await eel.delete_server_by_ip(serverData.ip)();
+                            serverList.removeChild(serverCard);
+                            updateServerSelect();
+                        } catch (error) {
+                            console.error(
+                                "Ошибка при удалении сервера:",
+                                error,
+                            );
+                        }
+                    },
+                );
                 serverList.appendChild(serverCard);
                 updateServerSelect();
-                const deleteButton =
-                    serverCard.querySelector(".delete-server-btn");
-                deleteButton.addEventListener("click", async function () {
-                    try {
-                        console.log(serverData.ip);
-                        await eel.delete_server_by_ip(serverData.ip)();
-                        serverList.removeChild(serverCard);
-                        updateServerSelect();
-                    } catch (error) {
-                        console.error("Ошибка при удалении сервера:", error);
-                    }
-                });
             } else {
                 console.log(
-                    `Не удалось получить информацию о сервере с IP ${ip}`
+                    `Не удалось получить информацию о сервере с IP ${ip}`,
                 );
             }
         }
@@ -655,14 +727,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const accountItem = document.createElement("div");
             accountItem.className = "account-item";
-            accountItem.innerHTML = `
-                <span>${account[1]}</span>
-                <button class="delete-account-btn">
-                    <i class="fas fa-trash"></i>
-                </button>
-            `;
+            const nameNode = document.createElement("span");
+            nameNode.textContent = account[1];
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "delete-account-btn";
+            const deleteIcon = document.createElement("i");
+            deleteIcon.className = "fas fa-trash";
+            deleteBtn.appendChild(deleteIcon);
+            accountItem.appendChild(nameNode);
+            accountItem.appendChild(deleteBtn);
 
-            const deleteBtn = accountItem.querySelector(".delete-account-btn");
             deleteBtn.addEventListener("click", async () => {
                 await eel.delete_account(account[1])();
                 accountItem.remove();
@@ -675,10 +749,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     addAccountBtn.addEventListener("click", async () => {
         const login = accountInput.value.trim();
-        if (login) {
-            await eel.insert_account(login)();
+        if (login && isValidLogin(login)) {
+            const inserted = await eel.insert_account(login)();
+            if (!inserted) {
+                showAlert();
+                return;
+            }
             accountInput.value = "";
             updateAccountSelect();
+        } else {
+            showAlert();
         }
     });
 
@@ -687,10 +767,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function updateVersionGrid() {
     const versionsGridHome = document.querySelector(
-        ".content-section#home .versions-grid"
+        ".content-section#home .versions-grid",
     );
     const versionsGridBuilds = document.querySelector(
-        ".content-section#builds .versions-grid"
+        ".content-section#builds .versions-grid",
     );
 
     const versions = [
@@ -837,7 +917,7 @@ async function updateVersionGrid() {
 
     const installedVersions = await eel.get_versions()();
     const installedVersionsSet = new Set(
-        installedVersions.map((version) => version[1])
+        installedVersions.map((version) => version[1]),
     );
 
     versionsGridHome.innerHTML = "";
@@ -876,6 +956,7 @@ async function updateVersionGrid() {
 
                 try {
                     console.log("Загрузка версии майнкрафт", version);
+                    startLauncherLogsStreaming(false);
                     await eel.minecraft_download_version(version)();
                     console.log("Загрузка версии майнкрафт завершена", version);
                     installedVersionsSet.add(version);
@@ -942,6 +1023,7 @@ async function updateVersionGrid() {
 
                 try {
                     console.log("Загрузка версии майнкрафт", version);
+                    startLauncherLogsStreaming(false);
                     await eel.minecraft_download_version_build(version)();
                     console.log("Загрузка версии майнкрафт завершена", version);
                     installedVersionsSet.add(version);
@@ -983,12 +1065,26 @@ document.addEventListener("DOMContentLoaded", () => {
     updateVersionSelect();
     updatePlaytimeOnPage();
     updateServerSelect();
+    const closeLogBtn = document.getElementById("runtimeLogCloseBtn");
+    const clearLogBtn = document.getElementById("runtimeLogClearBtn");
+    if (closeLogBtn) {
+        closeLogBtn.addEventListener("click", hideRuntimeLogsModal);
+    }
+    if (clearLogBtn) {
+        clearLogBtn.addEventListener("click", () => {
+            const output = document.getElementById("runtimeLogContent");
+            if (output) {
+                output.textContent = "";
+            }
+            logPosition = 0;
+        });
+    }
 });
 
 function updatePlaytimeOnPage() {
     eel.sum_time()(function (totalTime) {
         // Заменяем запятую на точку для корректного парсинга
-        const time = parseFloat(String(totalTime).replace(',', '.'));
+        const time = parseFloat(String(totalTime).replace(",", "."));
 
         // Целая часть — часы
         const hours = Math.floor(time);
@@ -998,7 +1094,8 @@ function updatePlaytimeOnPage() {
 
         // Записываем
         document.querySelector(".playtime-hours").textContent = `${hours} ч.`;
-        document.querySelector(".playtime-minutes").textContent = `${minutes} мин.`;
+        document.querySelector(".playtime-minutes").textContent =
+            `${minutes} мин.`;
 
         console.log(`Время успешно записано: ${hours} ч. ${minutes} мин.`);
     });
@@ -1028,7 +1125,7 @@ function reconnectEel() {
 
     eel._websocket.onclose = function () {
         console.warn(
-            "WebSocket снова закрылся. Повторная попытка через 3 секунды..."
+            "WebSocket снова закрылся. Повторная попытка через 3 секунды...",
         );
         setTimeout(reconnectEel, 3000); // Пробуем снова через 3 секунды
     };
@@ -1109,7 +1206,7 @@ function closeUpdateModalCircular() {
 // Обновление прогресс-бара
 function updateProgressDownloadLauncher(progress) {
     const progressBar = document.querySelector(
-        ".circular-progress-update .progress-update"
+        ".circular-progress-update .progress-update",
     );
     const progressTextUpdate = document.querySelector(".progress-text-update");
     console.log("Обновление прогресса:", progress); // Отладочный вывод
