@@ -1,0 +1,393 @@
+import os
+import shutil
+import eel
+import requests
+
+from db.database import create_connection
+from utils.config import minecraft_directory, VERSIONS_LAUNCHER
+
+db_path = r"C:\.stoneworld\db\launcher.db"
+
+@eel.expose
+def insert_version(version):
+    """Добавление новой версии в таблицу."""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''INSERT INTO versions (version) VALUES (?)''', (version,))
+    conn.commit()
+    conn.close()
+
+@eel.expose
+def get_versions():
+    """Получение всех версий из базы данных."""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT * FROM versions ORDER BY version DESC''')
+    versions_list = cursor.fetchall()
+    conn.close()
+    return versions_list
+    
+@eel.expose
+def insert_account(login):
+    """Добавление нового аккаунта в таблицу."""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''INSERT INTO accounts (login) VALUES (?)''', (login,))
+    conn.commit()
+    conn.close()
+
+@eel.expose
+def delete_account(login):
+    """Удаление аккаунта из базы данных."""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''DELETE FROM accounts WHERE login = ?''', (login,))
+    conn.commit()
+    conn.close()
+
+@eel.expose
+def get_accounts():
+    """Получение всех аккаунтов из базы данных."""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT * FROM accounts''')
+    account_list = cursor.fetchall()
+    conn.close()
+    return account_list
+
+@eel.expose
+def update_account_version(login, version):
+    """Обновление выбора логина и версии для следущего захода в лаунчер"""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    # Аккаунт
+    cursor.execute('''UPDATE accounts SET choose = 0''')
+    conn.commit()
+    cursor.execute('''UPDATE accounts SET choose = 1 WHERE login = ?''', (login,))
+    conn.commit()
+    # Версия
+    cursor.execute('''UPDATE versions SET choose = 0''')
+    conn.commit()
+    cursor.execute('''UPDATE versions SET choose = 1 WHERE version = ?''', (version,))
+    conn.commit()
+    conn.close()
+    
+@eel.expose
+def get_account_version():
+    """Получение логина и версии при запуске лаунчера"""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        '''
+        SELECT a.login, v.version
+        FROM accounts AS a
+        JOIN versions AS v
+        ON a.choose = 1 AND v.choose = 1
+        '''
+    )
+    choose = cursor.fetchall()
+    if not choose:
+        return []
+
+    return choose[0][0], choose[0][1]
+
+def insert_setting(memory, checkbox, bit_checkbox, optimiz_checkbox, argument):
+    """Добавление новых данных в таблицу settings."""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''INSERT INTO settings (
+                   memory,
+                   checkbox,
+                   bit_checkbox,
+                   optimiz_checkbox,
+                   argument) 
+                   VALUES (?, ?, ?, ?, ?)''', (memory, checkbox, bit_checkbox, optimiz_checkbox, argument))
+    conn.commit()
+    conn.close()
+
+@eel.expose
+def update_setting_memory(memory):
+    """Обновление данных в таблице settings memory"""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''UPDATE settings SET memory = ?''', (int(memory),))
+    conn.commit()
+    conn.close()
+    
+@eel.expose
+def update_setting_checkbox(value):
+    """Обновление состояния чекбокса в базе данных (0 или 1)."""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''UPDATE settings SET checkbox = ?''', (int(value),))
+    conn.commit()
+    conn.close()
+    
+@eel.expose
+def update_setting_bit_checkbox(value):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''UPDATE settings SET bit_checkbox = ?''', (int(value),))
+    conn.commit()
+    conn.close()
+    
+@eel.expose
+def update_setting_optimiz_checkbox(value):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''UPDATE settings SET optimiz_checkbox = ?''', (int(value),))
+    conn.commit()
+    conn.close()
+    
+@eel.expose
+def update_setting_argument(value):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''UPDATE settings SET argument = ?''', (value,))
+    conn.commit()
+    conn.close()
+    
+    
+@eel.expose
+def get_settings():
+    """Получение всех настроек из таблицы settings."""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute('''SELECT memory, checkbox, bit_checkbox, optimiz_checkbox, argument FROM settings''')
+    setting = cursor.fetchone()
+    conn.close()
+    
+    if setting:
+        return {
+            "memory": setting[0],
+            "checkbox": setting[1],
+            "bit_checkbox": setting[2],
+            "optimiz_checkbox": setting[3],
+            "argument": setting[4]
+        }
+    else:
+        return {
+            "memory": 2048,
+            "checkbox": 0,
+            "bit_checkbox": 0,
+            "optimiz_checkbox": 0,
+            "argument": ""
+        }
+    
+@eel.expose
+def delete_versions_list(version):
+    try:
+        minecraft_directory_version = minecraft_directory + f"\\{version}"
+        if os.path.exists(minecraft_directory_version):
+            shutil.rmtree(minecraft_directory_version)
+        delete_version_error(version)
+        return True
+    except Exception as e:
+        print(f"Ошибка при удалении версии: {e}")
+        return False
+    
+@eel.expose
+def check_server_info(ip):
+    url = f"https://api.mcstatus.io/v2/status/java/{ip}"
+    
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            
+            if data['online']:
+                status = 'Online'
+            else:
+                status = 'Offline'
+            server_info = {
+                "ip": ip,
+                "name": data.get('version', 'Unknown').get('name_raw', 'Unknown'),
+                "players_online": data.get('players', {}).get('online', 0),
+                "players_max": data.get('players', {}).get('max', 0),
+                "version": data.get('version', 'Unknown'),
+                "status": status,
+                "icon": data['icon']
+            }
+            try:
+                check_ip_address(ip)
+            except:
+                add_ip_address(ip)
+                
+            return server_info
+
+        else:
+            return None
+    except requests.exceptions.RequestException:
+        return None
+    
+@eel.expose
+def get_ip_address():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT ip FROM servers''')
+    server_ips = cursor.fetchall()
+    conn.close()
+    return [ip[0] for ip in server_ips]
+
+@eel.expose
+def delete_server_by_ip(ip_address):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''DELETE FROM servers WHERE ip = ?''', (ip_address,))
+    conn.commit()
+    conn.close()
+
+@eel.expose 
+def sum_time():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT SUM(hour) FROM timegame''')
+    hour = cursor.fetchone()
+    if hour[0] is None:
+        conn.close()
+        return 0
+    
+    conn.close()
+    return hour[0]
+
+@eel.expose 
+def sum_time_last_date():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT date, hour FROM timegame''')
+    hour_last = cursor.fetchall()
+    if hour_last == []:
+        conn.close()
+        return '-', 0
+    
+    conn.close()
+    sum_hour = 0
+    for date_last, hour in hour_last:
+        if hour_last[-1][0] == date_last:
+            sum_hour += hour
+            
+    return hour_last[-1][0], round(sum_hour, 2)
+
+def check_settings():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT * FROM settings''')
+    setting = cursor.fetchall()
+    conn.close()
+    return setting
+
+def get_memory():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT memory FROM settings''')
+    memory = cursor.fetchone()
+    conn.close()
+    return memory
+
+def get_checkbox():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT checkbox FROM settings''')
+    checkbox = cursor.fetchone()
+    conn.close()
+    return checkbox[0]
+
+def get_bit_optimiz_argument():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT bit_checkbox, optimiz_checkbox, argument FROM settings''')
+    setting_all = cursor.fetchall()
+    conn.close()
+    return setting_all[0]
+
+def delete_version_error(version):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''DELETE FROM versions WHERE version = ?''', (version,))
+    conn.commit()
+    conn.close()
+    
+def add_ip_address(ip_address):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''INSERT INTO servers (ip) VALUES (?)''', (ip_address,))
+    conn.commit()
+    conn.close()
+    
+def check_ip_address(ip_address):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT ip FROM servers WHERE ip = ?''', (ip_address,))
+    server = cursor.fetchone()
+    conn.close()
+    return server[0]
+
+def add_time(date, hour):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''INSERT INTO timegame (date, hour) VALUES (?, ?)''', (date, hour))
+    conn.commit()
+    conn.close()
+
+@eel.expose
+def check_version_launcher():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT version FROM launcher''')
+    launcher = cursor.fetchall()
+    conn.close()
+    
+    url_version = "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/launcher.json"
+    
+    proxies = {
+        "http": None,
+        "https": None
+    }
+    
+    response = requests.get(url=url_version, proxies=proxies)
+    json_data = response.json()
+    try:
+        launcher_version = launcher[0][0]
+    except:
+        try:
+            launcher_version = launcher[0]
+        except:
+            launcher_version = launcher
+
+    if launcher_version == json_data['version']:
+        return False
+    else:
+        return True
+    
+def start_check_version_launcher():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''SELECT version FROM launcher''')
+    launcher = cursor.fetchall()
+    conn.close()
+
+    if not launcher:
+        return True
+    else:
+        return False
+
+def update_last_version_launcher():
+    
+    url_version = "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/launcher.json"
+    response = requests.get(url_version)
+    json_data = response.json()
+    version = json_data['version']
+    
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''UPDATE launcher SET version = ?''', (version,))
+    conn.commit()
+    conn.close()
+
+def add_version_launcher():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''INSERT INTO launcher (version) VALUES (?)''', (VERSIONS_LAUNCHER,))
+    conn.commit()
+    conn.close()
