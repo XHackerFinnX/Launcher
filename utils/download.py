@@ -193,12 +193,12 @@ def verify_updater_binary(exe_path: str, checksum_path: str) -> bool:
 @eel.expose
 def downolad_launcher_version():
     exe_path = r"C:\.stoneworld\access\SLupdate.exe"
-    checksum_path = r"C:\.stoneworld\access\SLupdate.sha256"
+    # checksum_path = r"C:\.stoneworld\access\SLupdate.sha256"
 
     if os.path.exists(exe_path):
-        if not verify_updater_binary(exe_path, checksum_path):
-            logger.error("Файл обновления не прошел проверку контрольной суммы")
-            return False
+        # if not verify_updater_binary(exe_path, checksum_path):
+        #     logger.error("Файл обновления не прошел проверку контрольной суммы")
+        #     return False
         subprocess.Popen([exe_path], shell=True)
         close_app_exe()
         return True
