@@ -25,7 +25,7 @@ def main():
         
     file_html = 'main.html'
     width = 1290
-    height = 628
+    height = 720
         
     # Проверка на установку Java
     if not download_java():

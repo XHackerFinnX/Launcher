@@ -1,14 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
     <head>
-        <title>StoneLauncher</title>
+        <title>SLauncher</title>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="google" content="notranslate" />
         <meta name="robots" content="notranslate" />
         <link
             rel="stylesheet"
-            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap"
+            rel="stylesheet"
         />
         <link
             rel="icon"
@@ -16,15 +22,61 @@
             href="https://raw.githubusercontent.com/XHackerFinnX/Domeae/refs/heads/master/db/file_zip/image/favicon.png"
         />
         <link rel="stylesheet" href="css/main.css" />
+        <!-- Eel: реальный для десктопа, мок для предпросмотра -->
         <script src="/eel.js"></script>
+        <script src="js/eel-mock.js"></script>
     </head>
 
     <body>
+        <!-- SVG defs for gradients -->
+        <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+            <defs>
+                <linearGradient
+                    id="progress-gradient"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="100%"
+                >
+                    <stop offset="0%" stop-color="#FFB86C" />
+                    <stop offset="100%" stop-color="#FF9A3C" />
+                </linearGradient>
+            </defs>
+        </svg>
+
         <div class="container">
-            <div class="sidebar">
+            <!-- ==================== SIDEBAR ==================== -->
+            <aside class="sidebar">
+                <div class="sidebar-brand">
+                    <div class="sidebar-brand-logo">
+                        <i class="fas fa-cube"></i>
+                    </div>
+                    <div class="sidebar-brand-text">
+                        <span class="sidebar-brand-name">STONELAUNCHER</span>
+                        <span
+                            class="sidebar-brand-version"
+                            id="launcher-version-label"
+                            >v2.0</span
+                        >
+                    </div>
+                </div>
+
+                <div class="sidebar-section-label">Меню</div>
+
                 <div class="menu-item active" data-section="home">
-                    <i class="fas fa-home"></i>
+                    <i class="fas fa-house"></i>
                     <span>Главная</span>
+                </div>
+                <div class="menu-item" data-section="news">
+                    <i class="fas fa-bullhorn"></i>
+                    <span>Обновления</span>
+                    <span class="badge" id="updates-badge" style="display: none"
+                        >1</span
+                    >
+                </div>
+                <div class="menu-item" data-section="builds">
+                    <i class="fas fa-wrench"></i>
+                    <span>Сборки</span>
                 </div>
                 <div class="menu-item" data-section="servers">
                     <i class="fas fa-server"></i>
@@ -34,319 +86,585 @@
                     <i class="fas fa-user"></i>
                     <span>Аккаунты</span>
                 </div>
-                <div class="menu-item" data-section="builds">
-                    <i class="fas fa-wrench"></i>
-                    <span>Сборки</span>
-                </div>
+
+                <div class="sidebar-section-label">Прочее</div>
+
                 <div class="menu-item" data-section="settings">
-                    <i class="fas fa-cog"></i>
+                    <i class="fas fa-sliders"></i>
                     <span>Настройки</span>
                 </div>
-                <div class="playtime" style="display: list-item">
-                    <div style="display: flex">
-                        <i class="fas fa-clock" style="margin-top: 5px"></i>
+
+                <div class="playtime">
+                    <div class="playtime-row">
+                        <div class="playtime-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
                         <div class="playtime-text">
-                            <span class="playtime-label">ВЫ ИГРАЛИ</span>
-                            <div style="display: flex">
+                            <span class="playtime-label">Время в игре</span>
+                            <div class="playtime-value">
                                 <span class="playtime-hours">0 ч.</span>
-                                <span
-                                    class="playtime-minutes"
-                                    style="margin-left: 5px; font-weight: bold"
-                                    >0 мин.</span
-                                >
+                                <span class="playtime-minutes">0 мин.</span>
                             </div>
                         </div>
                     </div>
-                    <div style="display: flex; margin-top: 10px">
-                        <span class="playtime-label" style="margin-top: 2px"
-                            >ПОСЛЕДНИЙ ЗАПУСК</span
-                        >
-                    </div>
-                    <div
-                        style="
-                            margin-top: 2px;
-                            font-weight: bold;
-                            display: flex;
-                        "
-                    >
-                        <span class="playtime-last-data">-</span>
-                        <div style="display: flex; margin-left: 5px">
-                            (<span
-                                id="playtime-hours-last"
-                                style="margin-left: 5px"
-                                >0 ч.</span
-                            >
-                            <span
-                                class="playtime-minutes-last"
-                                style="margin-left: 5px; font-weight: bold"
-                                >0 мин.</span
-                            >)
+                    <div class="playtime-divider"></div>
+                    <div class="playtime-row">
+                        <div class="playtime-icon">
+                            <i class="fas fa-calendar-day"></i>
+                        </div>
+                        <div class="playtime-text">
+                            <span class="playtime-label">Последний запуск</span>
+                            <div class="playtime-value">
+                                <span class="playtime-last-data">—</span>
+                                <span
+                                    style="
+                                        color: var(--text-dim);
+                                        font-weight: 400;
+                                        font-size: 11px;
+                                        margin-left: 4px;
+                                    "
+                                >
+                                    (<span id="playtime-hours-last">0 ч.</span>
+                                    <span class="playtime-minutes-last"
+                                        >0 мин.</span
+                                    >)
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-            <div class="content">
-                <div class="content-section active" id="home">
-                    <h1 class="content-header">
-                        Добро пожаловать в STONELAUNCHER
-                    </h1>
+            </aside>
+
+            <!-- ==================== CONTENT ==================== -->
+            <main class="content">
+                <!-- ===== HOME ===== -->
+                <section class="content-section active" id="home">
+                    <div class="hero-card">
+                        <div class="hero-eyebrow">
+                            <i class="fas fa-sparkles"></i>
+                            Добро пожаловать
+                        </div>
+                        <h1 class="hero-title">
+                            Готовы к новому приключению в STONELAUNCHER?
+                        </h1>
+                        <p class="hero-description">
+                            Выберите версию Minecraft, добавьте свой логин и
+                            нажмите «Играть». Лаунчер сам скачает всё
+                            необходимое и запустит игру.
+                        </p>
+                        <div class="hero-actions">
+                            <button
+                                class="btn-primary"
+                                data-jump-section="builds"
+                            >
+                                <i class="fas fa-wand-magic-sparkles"></i>
+                                Открыть сборки
+                            </button>
+                            <button
+                                class="btn-secondary"
+                                data-jump-section="news"
+                            >
+                                <i class="fas fa-bullhorn"></i>
+                                Что нового
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="stats-row">
+                        <div class="stat-card">
+                            <div class="stat-card-label">
+                                <i class="fas fa-download"></i>
+                                Установлено версий
+                            </div>
+                            <div class="stat-card-value" id="stat-installed">
+                                0
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">
+                                <i class="fas fa-user-group"></i>
+                                Аккаунтов
+                            </div>
+                            <div class="stat-card-value" id="stat-accounts">
+                                0
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">
+                                <i class="fas fa-server"></i>
+                                Серверов
+                            </div>
+                            <div class="stat-card-value" id="stat-servers">
+                                0
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">
+                                <i class="fas fa-clock"></i>
+                                Часов в игре
+                            </div>
+                            <div class="stat-card-value" id="stat-hours">
+                                0<span class="unit">ч</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="page-header" style="margin-bottom: 14px">
+                        <div class="page-header-text">
+                            <h2 class="page-title" style="font-size: 18px">
+                                Версии Minecraft
+                            </h2>
+                            <p class="page-subtitle">
+                                Скачайте любую релизную версию игры
+                            </p>
+                        </div>
+                        <div class="page-actions">
+                            <div class="search-wrapper">
+                                <i class="fas fa-search"></i>
+                                <input
+                                    type="text"
+                                    class="search-input"
+                                    id="home-version-search"
+                                    placeholder="Поиск версии…"
+                                />
+                            </div>
+                        </div>
+                    </div>
                     <div class="versions-grid"></div>
-                </div>
+                </section>
 
-                <div class="content-section" id="servers">
-                    <h2 class="content-header">Сервера Minecraft</h2>
+                <!-- ===== NEWS / UPDATES ===== -->
+                <section class="content-section" id="news">
+                    <div class="page-header">
+                        <div class="page-header-text">
+                            <h2 class="page-title">Обновления и новости</h2>
+                            <p class="page-subtitle">
+                                Последние изменения StoneLauncher и новости из
+                                мира Minecraft
+                            </p>
+                        </div>
+                        <div class="page-actions">
+                            <button
+                                class="btn-secondary"
+                                id="check-updates-btn"
+                            >
+                                <i class="fas fa-arrows-rotate"></i>
+                                Проверить обновления
+                            </button>
+                        </div>
+                    </div>
 
-                    <div class="server-input">
+                    <div class="updates-list" id="updates-list">
+                        <!-- Заполняется в JS -->
+                    </div>
+                </section>
+
+                <!-- ===== BUILDS ===== -->
+                <section class="content-section" id="builds">
+                    <div class="page-header">
+                        <div class="page-header-text">
+                            <h2 class="page-title">Доступные сборки</h2>
+                            <p class="page-subtitle">
+                                Выберите модпак или версию с модами
+                            </p>
+                        </div>
+                        <div class="page-actions">
+                            <div class="search-wrapper">
+                                <i class="fas fa-search"></i>
+                                <input
+                                    type="text"
+                                    class="search-input"
+                                    id="builds-search"
+                                    placeholder="Поиск сборки…"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="filter-tabs" id="builds-filter">
+                        <button class="filter-tab active" data-filter="all">
+                            Все <span class="count" data-count="all">0</span>
+                        </button>
+                        <button class="filter-tab" data-filter="modpack">
+                            <i class="fas fa-box-archive"></i> Модпаки
+                            <span class="count" data-count="modpack">0</span>
+                        </button>
+                        <button class="filter-tab" data-filter="forge">
+                            <i class="fas fa-hammer"></i> Forge
+                            <span class="count" data-count="forge">0</span>
+                        </button>
+                        <button class="filter-tab" data-filter="fabric">
+                            <i class="fas fa-shirt"></i> Fabric
+                            <span class="count" data-count="fabric">0</span>
+                        </button>
+                    </div>
+
+                    <div class="versions-grid"></div>
+                </section>
+
+                <!-- ===== SERVERS ===== -->
+                <section class="content-section" id="servers">
+                    <div class="page-header">
+                        <div class="page-header-text">
+                            <h2 class="page-title">Сервера Minecraft</h2>
+                            <p class="page-subtitle">
+                                Добавляйте свои любимые сервера и заходите в
+                                один клик
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="server-input-row server-input">
                         <input
                             type="text"
                             id="server-ip"
-                            placeholder="Введите IP адрес сервера"
+                            placeholder="play.example.com или 192.168.1.1:25565"
                         />
                         <button id="add-server-btn" class="add-server-btn">
                             <i class="fas fa-plus"></i>
+                            Добавить
                         </button>
                     </div>
 
                     <div id="server-list" class="server-list"></div>
-                </div>
+                </section>
 
-                <div class="content-section" id="accounts">
+                <!-- ===== ACCOUNTS ===== -->
+                <section class="content-section" id="accounts">
+                    <div class="page-header">
+                        <div class="page-header-text">
+                            <h2 class="page-title">Мои аккаунты</h2>
+                            <p class="page-subtitle">
+                                Добавьте никнейм для входа на сервера и в
+                                одиночную игру
+                            </p>
+                        </div>
+                    </div>
+
                     <div class="accounts-container">
                         <div class="accounts-form">
                             <div class="input-group">
-                                <label for="login">Логин:</label>
+                                <label class="form-label" for="login"
+                                    >Никнейм</label
+                                >
                                 <input
                                     type="text"
                                     id="login"
                                     class="account-input"
-                                    placeholder="Введите логин"
+                                    placeholder="Например, Steve_2026"
+                                    autocomplete="off"
                                 />
+                                <p class="input-helper">
+                                    3–16 символов: латиница, цифры и нижнее
+                                    подчёркивание
+                                </p>
                             </div>
                             <button class="add-account-btn">
-                                <i class="fas fa-plus"></i>
-                                Добавить
+                                <i class="fas fa-user-plus"></i>
+                                Добавить аккаунт
                             </button>
                         </div>
                         <div class="accounts-list">
-                            <div class="accounts-list-header">Мои аккаунты</div>
+                            <div class="accounts-list-header">
+                                <span>Список</span>
+                                <span
+                                    class="accounts-list-count"
+                                    id="accounts-count"
+                                    >0</span
+                                >
+                            </div>
                             <div class="account-items"></div>
                         </div>
                     </div>
-                </div>
+                </section>
 
-                <div class="content-section" id="builds">
-                    <h1 class="content-header">Доступные сборки</h1>
-                    <div class="versions-grid"></div>
-                </div>
-
-                <div class="content-section" id="settings">
-                    <h2 class="content-header">Настройки</h2>
-
-                    <div class="settings-item">
-                        <h3 class="settings-subheader">Выделение памяти</h3>
-                        <div class="memory-selector">
-                            <div class="memory-value">
-                                <span id="memory-value">4096</span> МБ
-                            </div>
-                            <div class="memory-presets">
-                                <button class="memory-preset" data-value="2048">
-                                    2 ГБ
-                                </button>
-                                <button class="memory-preset" data-value="4096">
-                                    4 ГБ
-                                </button>
-                                <button class="memory-preset" data-value="6144">
-                                    6 ГБ
-                                </button>
-                                <button class="memory-preset" data-value="8192">
-                                    8 ГБ
-                                </button>
-                                <button
-                                    class="memory-preset"
-                                    data-value="10240"
-                                >
-                                    10 ГБ
-                                </button>
-                                <button
-                                    class="memory-preset"
-                                    data-value="12288"
-                                >
-                                    12 ГБ
-                                </button>
-                            </div>
-                            <input
-                                type="range"
-                                id="memory-slider"
-                                class="memory-slider"
-                                min="512"
-                                max="12288"
-                                step="512"
-                                value="4096"
-                            />
+                <!-- ===== SETTINGS ===== -->
+                <section class="content-section" id="settings">
+                    <div class="page-header">
+                        <div class="page-header-text">
+                            <h2 class="page-title">Настройки</h2>
+                            <p class="page-subtitle">
+                                Производительность, поведение лаунчера и Java
+                            </p>
                         </div>
                     </div>
 
-                    <div class="settings-item">
-                        <h3 class="settings-subheader">
-                            Поведение лаунчера после запуска
-                        </h3>
-                        <div class="launcher-behavior">
-                            <label class="radio-container">
-                                <input
-                                    type="radio"
-                                    name="launcher-behavior"
-                                    value="keep-open"
-                                    checked
-                                />
-                                <span class="radio-custom"></span>
-                                <span class="radio-label"
-                                    >Оставлять открытым</span
-                                >
-                            </label>
-                            <label class="radio-container">
-                                <input
-                                    type="radio"
-                                    name="launcher-behavior"
-                                    value="close"
-                                />
-                                <span class="radio-custom"></span>
-                                <span class="radio-label">Закрывать</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="settings-item">
-                        <h3 class="settings-subheader">Удаление версии</h3>
-                        <h4 class="settings-subheader-h4">
-                            После удаления версии, рекомендуем перезапустить
-                            лаунчер!
-                        </h4>
-                        <div class="version-deletion">
-                            <select
-                                id="version-select-list"
-                                class="version-select-list"
-                            >
-                                <option value="">Выберите версию</option>
-                            </select>
-                            <button id="delete-version-btn" class="delete-btn">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
-                        </div>
-                        <p id="delete-message" class="delete-message"></p>
-                    </div>
-
-                    <div class="settings-item">
-                        <h3 class="settings-subheader">Папка игры</h3>
-                        <div class="game-folder-selection">
-                            <select
-                                id="version-select-folder"
-                                class="version-select-list"
-                            >
-                                <option value="">Выберите версию</option>
-                            </select>
-                            <button
-                                id="select-folder-btn"
-                                class="select-folder-btn"
-                            >
-                                <i class="fas fa-folder"></i>
-                            </button>
-                        </div>
-                        <p id="folder-message" class="folder-message"></p>
-                    </div>
-
-                    <div class="settings-item">
-                        <h3 class="settings-subheader">32/64 бит версия</h3>
-                        <div class="bit-version-toggle">
-                            <h4>
-                                <span
-                                    >Использовать 64-битную версию. Не работает
-                                    для версии 1.17 и выше.</span
-                                >
+                    <div class="settings-container">
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fas fa-memory"></i
+                                ></span>
+                                Выделение памяти
+                            </h3>
+                            <h4 class="settings-subheader-h4">
+                                Сколько оперативной памяти выделить Minecraft.
+                                Для современных версий рекомендуется 4–8 ГБ.
                             </h4>
-                            <label class="switch">
+                            <div class="memory-selector">
+                                <div class="memory-value">
+                                    <span id="memory-value">4096</span> МБ
+                                </div>
+                                <div class="memory-presets">
+                                    <button
+                                        class="memory-preset"
+                                        data-value="2048"
+                                    >
+                                        2 ГБ
+                                    </button>
+                                    <button
+                                        class="memory-preset"
+                                        data-value="4096"
+                                    >
+                                        4 ГБ
+                                    </button>
+                                    <button
+                                        class="memory-preset"
+                                        data-value="6144"
+                                    >
+                                        6 ГБ
+                                    </button>
+                                    <button
+                                        class="memory-preset"
+                                        data-value="8192"
+                                    >
+                                        8 ГБ
+                                    </button>
+                                    <button
+                                        class="memory-preset"
+                                        data-value="10240"
+                                    >
+                                        10 ГБ
+                                    </button>
+                                    <button
+                                        class="memory-preset"
+                                        data-value="12288"
+                                    >
+                                        12 ГБ
+                                    </button>
+                                </div>
                                 <input
-                                    type="checkbox"
-                                    id="bit-version-toggle"
+                                    type="range"
+                                    id="memory-slider"
+                                    class="memory-slider"
+                                    min="512"
+                                    max="12288"
+                                    step="512"
+                                    value="4096"
                                 />
-                                <span class="slider round"></span>
-                            </label>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="settings-item">
-                        <h3 class="settings-subheader">Оптимизация игры</h3>
-                        <div class="optimiz-toggle">
-                            <h4>
-                                <span
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fas fa-window-restore"></i
+                                ></span>
+                                Поведение после запуска
+                            </h3>
+                            <h4 class="settings-subheader-h4">
+                                Что делать с лаунчером, когда игра уже запущена.
+                            </h4>
+                            <div class="launcher-behavior">
+                                <label class="radio-container">
+                                    <input
+                                        type="radio"
+                                        name="launcher-behavior"
+                                        value="keep-open"
+                                        checked
+                                    />
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label"
+                                        >Оставлять открытым</span
+                                    >
+                                </label>
+                                <label class="radio-container">
+                                    <input
+                                        type="radio"
+                                        name="launcher-behavior"
+                                        value="close"
+                                    />
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label"
+                                        >Закрывать после запуска игры</span
+                                    >
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fas fa-trash-can"></i
+                                ></span>
+                                Удаление версии
+                            </h3>
+                            <h4 class="settings-subheader-h4">
+                                После удаления версии рекомендуем перезапустить
+                                лаунчер.
+                            </h4>
+                            <div class="version-deletion">
+                                <select
+                                    id="version-select-list"
+                                    class="version-select-list"
+                                >
+                                    <option value="">
+                                        Выберите версию для удаления
+                                    </option>
+                                </select>
+                                <button
+                                    id="delete-version-btn"
+                                    class="delete-btn"
+                                    title="Удалить"
+                                >
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                            <p id="delete-message" class="delete-message"></p>
+                        </div>
+
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fas fa-folder-open"></i
+                                ></span>
+                                Папка игры
+                            </h3>
+                            <h4 class="settings-subheader-h4">
+                                Откройте папку с файлами выбранной версии в
+                                проводнике.
+                            </h4>
+                            <div class="game-folder-selection">
+                                <select
+                                    id="version-select-folder"
+                                    class="version-select-list"
+                                >
+                                    <option value="">Выберите версию</option>
+                                </select>
+                                <button
+                                    id="select-folder-btn"
+                                    class="select-folder-btn"
+                                    title="Открыть папку"
+                                >
+                                    <i class="fas fa-folder-open"></i>
+                                </button>
+                            </div>
+                            <p id="folder-message" class="folder-message"></p>
+                        </div>
+
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fas fa-microchip"></i
+                                ></span>
+                                64-битная версия Java
+                            </h3>
+                            <div class="bit-version-toggle toggle-row">
+                                <span class="toggle-text"
+                                    >Использовать 64-битную Java. Не работает
+                                    для версий 1.17 и выше.</span
+                                >
+                                <label class="switch">
+                                    <input
+                                        type="checkbox"
+                                        id="bit-version-toggle"
+                                    />
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fas fa-gauge-high"></i
+                                ></span>
+                                Оптимизация игры
+                            </h3>
+                            <div class="optimiz-toggle toggle-row">
+                                <span class="toggle-text"
                                     >Экспериментальная настройка для увеличения
-                                    FPS. Не работает для версии 1.17 и
+                                    FPS. Не работает для версий 1.17 и
                                     выше.</span
                                 >
-                            </h4>
-                            <label class="switch">
-                                <input type="checkbox" id="optimiz-toggle" />
-                                <span class="slider round"></span>
-                            </label>
+                                <label class="switch">
+                                    <input
+                                        type="checkbox"
+                                        id="optimiz-toggle"
+                                    />
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="settings-item">
-                        <h3 class="settings-subheader">Java аргументы</h3>
-                        <div class="java-arguments">
-                            <div class="argument-toggle">
-                                <h4><span>Тенелии Аргументы</span></h4>
-                                <label
-                                    class="switch"
-                                    style="margin-top: 5px; margin-bottom: 15px"
-                                >
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fab fa-java"></i
+                                ></span>
+                                Java аргументы
+                            </h3>
+                            <h4 class="settings-subheader-h4">
+                                Дополнительные параметры виртуальной машины Java
+                                для запуска игры.
+                            </h4>
+                            <div class="java-arguments">
+                                <div class="argument-toggle">
+                                    <h4>Тенелии аргументы</h4>
+                                    <label class="switch">
+                                        <input
+                                            type="checkbox"
+                                            id="tenelia-args-toggle"
+                                        />
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                                <div class="argument-toggle">
+                                    <h4>G1GC аргументы</h4>
+                                    <label class="switch">
+                                        <input
+                                            type="checkbox"
+                                            id="g1gc-args-toggle"
+                                        />
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                                <div class="custom-args">
+                                    <h4>
+                                        <label for="custom-args-input"
+                                            >Свои аргументы</label
+                                        >
+                                    </h4>
                                     <input
-                                        type="checkbox"
-                                        id="tenelia-args-toggle"
+                                        type="text"
+                                        id="custom-args-input"
+                                        placeholder="-Xmx4G -XX:+UseG1GC …"
                                     />
-                                    <span class="slider round"></span>
-                                </label>
-                            </div>
-                            <div class="argument-toggle">
-                                <h4><span>G1GC Аргументы</span></h4>
-                                <label
-                                    class="switch"
-                                    style="margin-top: 5px; margin-bottom: 15px"
-                                >
-                                    <input
-                                        type="checkbox"
-                                        id="g1gc-args-toggle"
-                                    />
-                                    <span class="slider round"></span>
-                                </label>
-                            </div>
-                            <div class="custom-args">
-                                <h4>
-                                    <label for="custom-args-input"
-                                        >Свои аргументы</label
-                                    >
-                                </h4>
-                                <input
-                                    type="text"
-                                    id="custom-args-input"
-                                    placeholder="Введите свои Java аргументы"
-                                />
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
+                </section>
+            </main>
         </div>
+
+        <!-- ==================== BOTTOM PLAY BAR ==================== -->
         <div class="bottom-panel">
-            <select class="account-select">
+            <select class="account-select" title="Аккаунт">
                 <option value="">Выберите аккаунт</option>
             </select>
-            <select class="version-select" onchange="toggleServerSelect()">
+            <select
+                class="version-select"
+                onchange="toggleServerSelect()"
+                title="Версия"
+            >
                 <option value="">Выберите версию</option>
             </select>
             <select
                 class="server-select"
                 id="server-select"
                 style="display: none"
+                title="Сервер"
             >
                 <option value="">Выберите сервер</option>
             </select>
@@ -368,118 +686,107 @@
                     </svg>
                     <div class="progress-text">0%</div>
                 </div>
-                <button class="play-btn" disabled>Играть</button>
+                <button class="play-btn" disabled>
+                    <i class="fas fa-play"></i>
+                    Играть
+                </button>
             </div>
         </div>
 
+        <!-- ==================== TOASTS ==================== -->
+        <div class="toast-container" id="toast-container"></div>
+
+        <!-- ==================== ALERTS ==================== -->
         <div id="customAlert" class="custom-alert">
             <div class="alert-box">
-                <h2>Ошибка</h2>
-                <p>Пожалуйста, выберите версию и логин.</p>
-                <button onclick="closeAlert()">Закрыть</button>
+                <h2>Не все данные заполнены</h2>
+                <p>
+                    Пожалуйста, выберите версию и аккаунт перед запуском игры.
+                </p>
+                <button onclick="closeAlert()">Понятно</button>
             </div>
         </div>
 
         <div id="customAlertVersions" class="custom-alert">
             <div class="alert-box">
-                <h2>Ошибка во время загрузки</h2>
-                <p>Попробуйте установить ещё раз.</p>
+                <h2>Ошибка загрузки</h2>
+                <p>
+                    Не удалось скачать версию. Проверьте интернет-соединение и
+                    попробуйте ещё раз.
+                </p>
                 <button onclick="closeAlertVersion()">Закрыть</button>
             </div>
         </div>
 
         <div id="customAlertGame" class="custom-alert">
             <div class="alert-box">
-                <h2>Ошибка при запуске игры</h2>
-                <p>Попробуйте отключить выбранные настройки.</p>
-                <p>Запустить заново или удалить выбранную версию.</p>
+                <h2>Ошибка запуска</h2>
+                <p>
+                    Не удалось запустить игру. Попробуйте отключить
+                    экспериментальные настройки или удалить и заново скачать
+                    версию.
+                </p>
                 <button onclick="closeAlertGame()">Закрыть</button>
             </div>
         </div>
 
         <div id="customAlertServer" class="custom-alert">
             <div class="alert-box">
-                <h2>Ошибка</h2>
-                <p>Не удалось получить информацию о сервере.</p>
+                <h2>Сервер недоступен</h2>
+                <p>
+                    Не удалось получить информацию о сервере. Проверьте
+                    корректность IP-адреса.
+                </p>
                 <button onclick="closeAlertServer()">Закрыть</button>
             </div>
         </div>
 
+        <!-- ==================== UPDATE MODALS ==================== -->
         <div id="updateModal" class="modal" style="display: none">
             <div class="modal-content">
-                <h2>Обновите лаунчер</h2>
-                <p>Доступна новая версия лаунчера. Хотите обновить?</p>
-                <button id="updateButton">Обновить</button>
+                <h2>Доступно обновление</h2>
+                <p>
+                    Вышла новая версия StoneLauncher с улучшениями и
+                    исправлениями. Обновить сейчас?
+                </p>
+                <button id="updateButton">
+                    <i class="fas fa-download"></i>
+                    Обновить
+                </button>
                 <button id="laterButton">Позже</button>
             </div>
         </div>
 
-        <!-- Прогресс-бар -->
         <div id="updateModalCircular" class="modal" style="display: none">
             <div class="circular-progress-update">
-                <svg width="60" height="60">
-                    <circle class="background" cx="30" cy="30" r="27"></circle>
+                <svg width="80" height="80">
+                    <circle class="background" cx="40" cy="40" r="36"></circle>
                     <circle
                         class="progress-update"
-                        cx="30"
-                        cy="30"
-                        r="27"
+                        cx="40"
+                        cy="40"
+                        r="36"
                     ></circle>
                 </svg>
                 <div class="progress-text-update">0%</div>
             </div>
         </div>
 
-        <!-- Кастомный алерт успешного обновления -->
         <div id="successModal" class="custom-modal">
             <div class="custom-modal-content">
-                <h2>Обновление успешно установлено!</h2>
-                <p>Перезапустите лаунчер.</p>
-                <button id="closeSuccessModal">Закрыть</button>
+                <h2>Обновление установлено</h2>
+                <p>Перезапустите лаунчер, чтобы применить изменения.</p>
+                <button id="closeSuccessModal">Перезапустить</button>
             </div>
         </div>
 
-        <!-- Кастомный алерт ошибки обновления -->
         <div id="errorModal" class="custom-modal">
             <div class="custom-modal-content">
                 <h2>Ошибка обновления</h2>
-                <p>Произошла ошибка при обновлении лаунчера.</p>
+                <p>Не удалось обновить лаунчер. Попробуйте позже.</p>
                 <button id="closeErrorModal">Закрыть</button>
             </div>
         </div>
-
-        <!-- <div id="runtimeLogModal" class="custom-modal" style="display: none">
-            <div
-                class="custom-modal-content"
-                style="max-width: 900px; width: 90%"
-            >
-                <h2>Логи запуска Minecraft</h2>
-                <pre
-                    id="runtimeLogContent"
-                    style="
-                        height: 320px;
-                        overflow: auto;
-                        background: #111;
-                        color: #cfead1;
-                        padding: 10px;
-                        border-radius: 8px;
-                        text-align: left;
-                        white-space: pre-wrap;
-                    "
-                ></pre>
-                <div
-                    style="
-                        display: flex;
-                        gap: 10px;
-                        justify-content: flex-end;
-                        margin-top: 10px;
-                    "
-                >
-                    <button id="runtimeLogClearBtn">Очистить окно</button>
-                    <button id="runtimeLogCloseBtn">Закрыть</button>
-                </div>
-            </div>
-        </div> -->
 
         <script src="js/main.js"></script>
         <script>
@@ -488,9 +795,10 @@
                 var serverSelect = document.querySelector(".server-select");
                 var selectedOption =
                     versionSelect.options[versionSelect.selectedIndex];
-
-                // Проверяем текст выбранной опции
-                if (selectedOption.text === "LunarПВП 1.8.9") {
+                if (
+                    selectedOption &&
+                    selectedOption.text === "LunarПВП 1.8.9"
+                ) {
                     serverSelect.style.display = "block";
                 } else {
                     serverSelect.style.display = "none";
@@ -498,65 +806,62 @@
             }
         </script>
         <script type="module">
-            // Получаем кортеж (дата-строка, часы)
-            const [dateStr, totalHoursPlayed] =
-                await eel.sum_time_last_date()();
+            try {
+                const [dateStr, totalHoursPlayed] =
+                    await eel.sum_time_last_date()();
 
-            // Если вернулся дефолт "-", ставим пустую дату
-            const lastLaunchDate =
-                dateStr !== "-" ? parseDateDMY(dateStr) : new Date();
+                const lastLaunchDate =
+                    dateStr !== "-" ? parseDateDMY(dateStr) : new Date();
 
-            // Обнуляем часы для корректного сравнения
-            const now = new Date();
-            now.setHours(0, 0, 0, 0);
-            lastLaunchDate.setHours(0, 0, 0, 0);
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+                lastLaunchDate.setHours(0, 0, 0, 0);
 
-            // Разница в днях
-            const diffTime = now - lastLaunchDate;
-            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                const diffTime = now - lastLaunchDate;
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-            // Формируем текст
-            let lastLaunchText;
-            if (diffDays === 0) {
-                lastLaunchText = "сегодня";
-            } else if (diffDays >= 5) {
-                lastLaunchText = `${diffDays} ${getDayWord(diffDays)} назад`;
-            } else {
-                lastLaunchText = `${lastLaunchDate.getDate()} ${lastLaunchDate.toLocaleString("ru", { month: "long" })}`;
-            }
+                let lastLaunchText;
+                if (dateStr === "-") {
+                    lastLaunchText = "никогда";
+                } else if (diffDays === 0) {
+                    lastLaunchText = "сегодня";
+                } else if (diffDays >= 5) {
+                    lastLaunchText = `${diffDays} ${getDayWord(diffDays)} назад`;
+                } else {
+                    lastLaunchText = `${lastLaunchDate.getDate()} ${lastLaunchDate.toLocaleString("ru", { month: "long" })}`;
+                }
 
-            const timeTotal = parseFloat(
-                String(totalHoursPlayed).replace(",", "."),
-            );
+                const timeTotal = parseFloat(
+                    String(totalHoursPlayed).replace(",", "."),
+                );
+                const hoursTotal = Math.floor(timeTotal);
+                const minutesTotal = Math.round((timeTotal - hoursTotal) * 60);
 
-            // Целая часть — часы
-            const hoursTotal = Math.floor(timeTotal);
+                document.querySelector(".playtime-last-data").textContent =
+                    lastLaunchText;
+                document.querySelector("#playtime-hours-last").textContent =
+                    `${hoursTotal} ч.`;
+                document.querySelector(".playtime-minutes-last").textContent =
+                    `${minutesTotal} мин.`;
 
-            // Дробная часть * 60 = минуты
-            const minutesTotal = Math.round((timeTotal - hoursTotal) * 60);
+                function getDayWord(n) {
+                    const lastDigit = n % 10;
+                    const lastTwo = n % 100;
+                    if (lastTwo >= 11 && lastTwo <= 14) return "дней";
+                    if (lastDigit === 1) return "день";
+                    if (lastDigit >= 2 && lastDigit <= 4) return "дня";
+                    return "дней";
+                }
 
-            // Вывод в интерфейс
-            document.querySelector(".playtime-last-data").textContent =
-                lastLaunchText;
-            document.querySelector("#playtime-hours-last").textContent =
-                `${hoursTotal} ч.`;
-            document.querySelector(".playtime-minutes-last").textContent =
-                `${minutesTotal} мин.`;
-
-            // Функция склонения слова "день"
-            function getDayWord(n) {
-                const lastDigit = n % 10;
-                const lastTwo = n % 100;
-                if (lastTwo >= 11 && lastTwo <= 14) return "дней";
-                if (lastDigit === 1) return "день";
-                if (lastDigit >= 2 && lastDigit <= 4) return "дня";
-                return "дней";
-            }
-
-            // Преобразует "DD.MM.YYYY" → Date
-            function parseDateDMY(dateStr) {
-                const [day, month, year] = dateStr.split(".");
-                return new Date(year, month - 1, day);
+                function parseDateDMY(dateStr) {
+                    const [day, month, year] = dateStr.split(".");
+                    return new Date(year, month - 1, day);
+                }
+            } catch (e) {
+                console.warn(
+                    "[StoneLauncher] sum_time_last_date недоступно",
+                    e,
+                );
             }
         </script>
     </body>

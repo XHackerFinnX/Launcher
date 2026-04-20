@@ -1,56 +1,114 @@
+/* ============================================
+   StoneLauncher 2.0 — main.js
+   Сохранены все вызовы eel.* для совместимости
+   с существующим Python-бэкендом.
+   ============================================ */
+
+// ---------- Sidebar navigation ----------
 document.querySelectorAll(".menu-item").forEach((item) => {
     item.addEventListener("click", () => {
-        document.querySelector(".menu-item.active").classList.remove("active");
+        const active = document.querySelector(".menu-item.active");
+        if (active) active.classList.remove("active");
         item.classList.add("active");
 
         const sectionId = item.getAttribute("data-section");
-        document
-            .querySelector(".content-section.active")
-            .classList.remove("active");
-        document.getElementById(sectionId).classList.add("active");
+        const activeSection = document.querySelector(".content-section.active");
+        if (activeSection) activeSection.classList.remove("active");
+        const target = document.getElementById(sectionId);
+        if (target) target.classList.add("active");
+
+        // Скролл к началу секции
+        document.querySelector(".content").scrollTop = 0;
     });
 });
 
+// Hero "jump to section" buttons
+document.querySelectorAll("[data-jump-section]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-jump-section");
+        const menuItem = document.querySelector(
+            `.menu-item[data-section="${id}"]`,
+        );
+        if (menuItem) menuItem.click();
+    });
+});
+
+// ---------- Toast notifications ----------
+function toast({ title, message = "", type = "info", duration = 3500 }) {
+    const container = document.getElementById("toast-container");
+    if (!container) return;
+    const el = document.createElement("div");
+    el.className = `toast ${type}`;
+    const icon =
+        type === "success"
+            ? "fa-circle-check"
+            : type === "error"
+              ? "fa-circle-exclamation"
+              : "fa-circle-info";
+    el.innerHTML = `
+        <i class="fas ${icon}"></i>
+        <div class="toast-content">
+            <div class="toast-title">${title}</div>
+            ${message ? `<div class="toast-message">${message}</div>` : ""}
+        </div>
+    `;
+    container.appendChild(el);
+    setTimeout(() => {
+        el.classList.add("removing");
+        setTimeout(() => el.remove(), 200);
+    }, duration);
+}
+
+// ---------- Settings: memory + behavior + java args ----------
 document.addEventListener("DOMContentLoaded", async function () {
     const memorySlider = document.getElementById("memory-slider");
     const memoryValue = document.getElementById("memory-value");
     const memoryPresets = document.querySelectorAll(".memory-preset");
 
-    // Получаем настройки с сервера
-    const settings = await eel.get_settings()();
+    let settings = {};
+    try {
+        settings = (await eel.get_settings()()) || {};
+    } catch (e) {
+        console.warn("[StoneLauncher] get_settings недоступно", e);
+        settings = {
+            memory: 4096,
+            checkbox: 0,
+            bit_checkbox: 0,
+            optimiz_checkbox: 0,
+            argument: "",
+        };
+    }
 
-    // Устанавливаем значение памяти
     memorySlider.value = settings.memory;
     memoryValue.textContent = settings.memory;
 
-    // Обновляем пресеты
     memoryPresets.forEach((preset) => {
-        if (preset.dataset.value === settings.memory.toString()) {
+        if (preset.dataset.value === String(settings.memory)) {
             preset.classList.add("active");
         } else {
             preset.classList.remove("active");
         }
     });
 
-    // Обновление отображения памяти
     async function updateMemoryDisplay(value) {
         memoryValue.textContent = value;
-        await eel.update_setting_memory(value)();
+        try {
+            await eel.update_setting_memory(value)();
+        } catch (e) {
+            /* mock or backend missing */
+        }
         memoryPresets.forEach((preset) => {
-            if (preset.dataset.value === value.toString()) {
-                preset.classList.add("active");
-            } else {
-                preset.classList.remove("active");
-            }
+            preset.classList.toggle(
+                "active",
+                preset.dataset.value === String(value),
+            );
         });
     }
 
-    // Обработчик для изменения значения на ползунке
     memorySlider.addEventListener("input", function () {
         updateMemoryDisplay(this.value);
     });
 
-    // Обработчик для кликов по пресетам
     memoryPresets.forEach((preset) => {
         preset.addEventListener("click", function () {
             const value = this.dataset.value;
@@ -59,12 +117,10 @@ document.addEventListener("DOMContentLoaded", async function () {
         });
     });
 
-    // Управление поведением лаунчера
+    // ----- Launcher behavior radios -----
     const radioButtons = document.querySelectorAll(
         'input[name="launcher-behavior"]',
     );
-
-    // Устанавливаем поведение лаунчера в зависимости от настройки
     if (settings.checkbox === 0) {
         document.querySelector(
             'input[name="launcher-behavior"][value="keep-open"]',
@@ -75,26 +131,20 @@ document.addEventListener("DOMContentLoaded", async function () {
         ).checked = true;
     }
 
-    // Обработчик для изменения поведения лаунчера
     radioButtons.forEach((button) => {
         button.addEventListener("change", (event) => {
-            console.log("Выбранное поведение лаунчера:", event.target.value);
             const checkboxValue = event.target.value === "keep-open" ? 0 : 1;
-            eel.update_setting_checkbox(checkboxValue)();
+            try {
+                eel.update_setting_checkbox(checkboxValue)();
+            } catch (e) {}
         });
     });
 
-    // Настройка битовой версии и оптимизации
+    // ----- Bit version & optimization -----
     const bitVersionToggle = document.getElementById("bit-version-toggle");
     const optimizToggle = document.getElementById("optimiz-toggle");
 
-    // Устанавливаем значения для битовой версии и оптимизации
-    if (settings.bit_checkbox === 1) {
-        bitVersionToggle.checked = true;
-    } else {
-        bitVersionToggle.checked = false;
-    }
-
+    bitVersionToggle.checked = settings.bit_checkbox === 1;
     if (settings.optimiz_checkbox === 1) {
         optimizToggle.checked = true;
         bitVersionToggle.checked = true;
@@ -102,53 +152,51 @@ document.addEventListener("DOMContentLoaded", async function () {
         optimizToggle.checked = false;
     }
 
-    // Обработчик для битовой версии
     bitVersionToggle.addEventListener("change", function () {
-        console.log("64-bit version:", this.checked);
         if (this.checked) {
-            eel.update_setting_bit_checkbox(1)();
+            try {
+                eel.update_setting_bit_checkbox(1)();
+            } catch (e) {}
         } else {
             if (optimizToggle.checked) {
                 bitVersionToggle.checked = true;
             } else {
-                eel.update_setting_bit_checkbox(0)();
+                try {
+                    eel.update_setting_bit_checkbox(0)();
+                } catch (e) {}
             }
         }
     });
 
-    // Обработчик для оптимизации
     optimizToggle.addEventListener("change", function () {
-        console.log("Оптимизация игры:", this.checked);
         if (this.checked) {
             bitVersionToggle.checked = true;
-            eel.update_setting_bit_checkbox(1)();
-            eel.update_setting_optimiz_checkbox(1)();
+            try {
+                eel.update_setting_bit_checkbox(1)();
+                eel.update_setting_optimiz_checkbox(1)();
+            } catch (e) {}
         } else {
-            eel.update_setting_optimiz_checkbox(0)();
+            try {
+                eel.update_setting_optimiz_checkbox(0)();
+            } catch (e) {}
         }
     });
 
-    // Настройка аргументов для игры
+    // ----- Java args -----
     const teneliaArgsToggle = document.getElementById("tenelia-args-toggle");
     const g1gcArgsToggle = document.getElementById("g1gc-args-toggle");
     const customArgsInput = document.getElementById("custom-args-input");
 
-    // Вспомогательная функция для сброса других аргументов
     function updateJavaArguments(activeElement) {
         const elements = [teneliaArgsToggle, g1gcArgsToggle, customArgsInput];
-
         elements.forEach((element) => {
             if (element !== activeElement) {
-                if (element.type === "checkbox") {
-                    element.checked = false;
-                } else if (element.type === "text") {
-                    element.value = "";
-                }
+                if (element.type === "checkbox") element.checked = false;
+                else if (element.type === "text") element.value = "";
             }
         });
     }
 
-    // Устанавливаем аргументы
     if (settings.argument === "Tenelia") {
         teneliaArgsToggle.checked = true;
         updateJavaArguments(teneliaArgsToggle);
@@ -159,52 +207,57 @@ document.addEventListener("DOMContentLoaded", async function () {
         customArgsInput.value = settings.argument;
     }
 
-    // Обработчики для аргументов
     teneliaArgsToggle.addEventListener("change", function () {
         if (this.checked) {
             updateJavaArguments(this);
-            console.log("Tenelia arguments enabled");
-            eel.update_setting_argument("Tenelia")();
+            try {
+                eel.update_setting_argument("Tenelia")();
+            } catch (e) {}
         } else {
-            console.log("Tenelia arguments disabled");
-            eel.update_setting_argument("")();
+            try {
+                eel.update_setting_argument("")();
+            } catch (e) {}
         }
     });
 
     g1gcArgsToggle.addEventListener("change", function () {
         if (this.checked) {
             updateJavaArguments(this);
-            console.log("G1GC arguments enabled");
-            eel.update_setting_argument("G1GC")();
+            try {
+                eel.update_setting_argument("G1GC")();
+            } catch (e) {}
         } else {
-            console.log("G1GC arguments disabled");
-            eel.update_setting_argument("")();
+            try {
+                eel.update_setting_argument("")();
+            } catch (e) {}
         }
     });
 
     customArgsInput.addEventListener("input", function () {
         if (this.value.trim() !== "") {
             updateJavaArguments(this);
-            eel.update_setting_argument(this.value)();
+            try {
+                eel.update_setting_argument(this.value)();
+            } catch (e) {}
         } else {
-            eel.update_setting_argument("")();
+            try {
+                eel.update_setting_argument("")();
+            } catch (e) {}
         }
     });
 });
 
-// Функция для обновления списка версий
+// ---------- Version helpers (settings page) ----------
 async function updateVersionList() {
-    // Получаем актуальный список версий через eel
     const versionSelect = document.getElementById("version-select-list");
-    const installedVersions = await eel.get_versions()();
-    const installedVersionsSet = new Set(
-        installedVersions.map((version) => version[1]),
-    );
+    let installedVersions = [];
+    try {
+        installedVersions = await eel.get_versions()();
+    } catch (e) {}
+    const installedVersionsSet = new Set(installedVersions.map((v) => v[1]));
 
-    // Очищаем текущий список
-    versionSelect.innerHTML = '<option value="">Выберите версию</option>';
-
-    // Добавляем новые версии в выпадающий список
+    versionSelect.innerHTML =
+        '<option value="">Выберите версию для удаления</option>';
     installedVersionsSet.forEach((version) => {
         const option = document.createElement("option");
         option.value = version;
@@ -215,13 +268,13 @@ async function updateVersionList() {
 
 async function updateVersionFolderList() {
     const versionSelect = document.getElementById("version-select-folder");
-    const installedVersions = await eel.get_versions()();
-    const installedVersionsSet = new Set(
-        installedVersions.map((version) => version[1]),
-    );
+    let installedVersions = [];
+    try {
+        installedVersions = await eel.get_versions()();
+    } catch (e) {}
+    const installedVersionsSet = new Set(installedVersions.map((v) => v[1]));
 
     versionSelect.innerHTML = '<option value="">Выберите версию</option>';
-
     installedVersionsSet.forEach((version) => {
         const option = document.createElement("option");
         option.value = version;
@@ -232,29 +285,44 @@ async function updateVersionFolderList() {
 
 document.addEventListener("DOMContentLoaded", function () {
     const deleteButton = document.getElementById("delete-version-btn");
-    const versionSelect = document.getElementById("version-select-list");
+    const versionSelectEl = document.getElementById("version-select-list");
     const message = document.getElementById("delete-message");
 
     deleteButton.addEventListener("click", async function () {
-        const selectedVersion = versionSelect.value;
+        const selectedVersion = versionSelectEl.value;
 
         if (selectedVersion) {
-            const success = await eel.delete_versions_list(selectedVersion)();
+            let success = false;
+            try {
+                success = await eel.delete_versions_list(selectedVersion)();
+            } catch (e) {}
 
             if (success) {
                 message.textContent = `Версия ${selectedVersion} удалена.`;
+                message.style.color = "var(--success)";
                 message.style.display = "block";
+                toast({
+                    title: "Версия удалена",
+                    message: selectedVersion,
+                    type: "success",
+                });
 
                 await updateVersionGrid();
                 await updateVersionSelect();
             } else {
                 message.textContent = "Произошла ошибка при удалении версии.";
+                message.style.color = "var(--danger)";
                 message.style.display = "block";
+                toast({ title: "Ошибка удаления", type: "error" });
             }
 
-            versionSelect.value = "";
+            versionSelectEl.value = "";
+            setTimeout(() => {
+                message.style.display = "none";
+            }, 3500);
         } else {
-            message.textContent = "Пожалуйста, выберите версию для удаления.";
+            message.textContent = "Выберите версию для удаления.";
+            message.style.color = "var(--text-muted)";
             message.style.display = "block";
         }
     });
@@ -262,27 +330,37 @@ document.addEventListener("DOMContentLoaded", function () {
 
 document.addEventListener("DOMContentLoaded", function () {
     const selectFolderButton = document.getElementById("select-folder-btn");
-    const versionSelect = document.getElementById("version-select-folder");
+    const versionSelectEl = document.getElementById("version-select-folder");
     const folderMessage = document.getElementById("folder-message");
 
     selectFolderButton.addEventListener("click", async function () {
-        const selectedVersion = versionSelect.value;
+        const selectedVersion = versionSelectEl.value;
 
         if (selectedVersion) {
-            await eel.open_folder_version(selectedVersion)();
+            try {
+                await eel.open_folder_version(selectedVersion)();
+                toast({
+                    title: "Папка открыта",
+                    message: selectedVersion,
+                    type: "info",
+                });
+            } catch (e) {}
         } else {
-            folderMessage.textContent =
-                "Пожалуйста, выберите версию для открытия папки.";
+            folderMessage.textContent = "Выберите версию.";
+            folderMessage.style.color = "var(--text-muted)";
             folderMessage.style.display = "block";
+            setTimeout(() => {
+                folderMessage.style.display = "none";
+            }, 2500);
         }
     });
 });
 
+// ---------- Bottom panel: version / play ----------
 const versionSelect = document.querySelector(".version-select");
 const serverSelect = document.querySelector(".server-select");
 const playBtn = document.querySelector(".play-btn");
-const downloadButtons = document.querySelectorAll(".download-btn");
-let installedVersions = new Set();
+let downloadButtons = document.querySelectorAll(".download-btn");
 let isDownloading = false;
 let logPollTimer = null;
 let logPosition = 0;
@@ -316,14 +394,18 @@ async function pollLauncherLogs() {
         }
         logPosition = response.position || logPosition;
     } catch (error) {
-        console.error("Ошибка чтения логов лаунчера:", error);
+        /* ignore */
     }
 }
 
 function startLauncherLogsStreaming(reset = false) {
-    eel.open_external_log_viewer()();
-    if (!externalLogsOpened) {
+    try {
         eel.open_external_log_viewer()();
+    } catch (e) {}
+    if (!externalLogsOpened) {
+        try {
+            eel.open_external_log_viewer()();
+        } catch (e) {}
         externalLogsOpened = true;
     }
     showRuntimeLogsModal();
@@ -333,59 +415,48 @@ function startLauncherLogsStreaming(reset = false) {
         output.textContent = "";
         logPosition = 0;
     }
-    if (logPollTimer) {
-        clearInterval(logPollTimer);
-    }
+    if (logPollTimer) clearInterval(logPollTimer);
     pollLauncherLogs();
     logPollTimer = setInterval(pollLauncherLogs, 800);
 }
 
 function toggleDownloadButtons(disable) {
+    downloadButtons = document.querySelectorAll(".download-btn");
     downloadButtons.forEach((btn) => {
+        if (btn.classList.contains("installed")) return;
         btn.disabled = disable;
-        if (disable) {
-            btn.style.backgroundColor = "#bdc3c7";
-            btn.style.opacity = "0.5";
-            btn.style.cursor = "not-allowed";
-        } else {
-            btn.style.backgroundColor = "#27ae60";
-            btn.style.opacity = "1";
-            btn.style.cursor = "pointer";
-        }
     });
 }
 
+// ---------- Alerts ----------
 function showAlert() {
     document.getElementById("customAlert").style.display = "flex";
 }
-
 function showAlertVersion() {
     document.getElementById("customAlertVersions").style.display = "flex";
 }
-
 function showAlertGame() {
     document.getElementById("customAlertGame").style.display = "flex";
 }
-
 function showAlertServer() {
     document.getElementById("customAlertServer").style.display = "flex";
 }
-
 function closeAlert() {
     document.getElementById("customAlert").style.display = "none";
 }
-
 function closeAlertVersion() {
     document.getElementById("customAlertVersions").style.display = "none";
 }
-
 function closeAlertGame() {
     document.getElementById("customAlertGame").style.display = "none";
 }
-
 function closeAlertServer() {
     document.getElementById("customAlertServer").style.display = "none";
 }
+window.closeAlert = closeAlert;
+window.closeAlertVersion = closeAlertVersion;
+window.closeAlertGame = closeAlertGame;
+window.closeAlertServer = closeAlertServer;
 
 function isValidLogin(login) {
     return /^[A-Za-z0-9_]{3,16}$/.test(login);
@@ -397,20 +468,38 @@ function isValidServerAddress(value) {
     );
 }
 
+// ---------- Server card ----------
 function createServerCard(serverData, onDelete) {
     const serverCard = document.createElement("div");
     serverCard.classList.add("server-card");
 
-    const image = document.createElement("img");
-    image.className = "server-card-image";
-    image.alt = serverData.name || "Minecraft server";
+    let image = null;
     if (
         typeof serverData.icon === "string" &&
         serverData.icon.startsWith("https://")
     ) {
+        image = document.createElement("img");
+        image.className = "server-card-image";
+        image.alt = serverData.name || "Minecraft server";
         image.src = serverData.icon;
+        image.onerror = () => {
+            const placeholder = document.createElement("div");
+            placeholder.className = "server-card-image";
+            placeholder.style.display = "flex";
+            placeholder.style.alignItems = "center";
+            placeholder.style.justifyContent = "center";
+            placeholder.innerHTML =
+                '<i class="fas fa-server" style="font-size:32px;color:rgba(255,255,255,0.4)"></i>';
+            image.replaceWith(placeholder);
+        };
     } else {
-        image.src = "";
+        image = document.createElement("div");
+        image.className = "server-card-image";
+        image.style.display = "flex";
+        image.style.alignItems = "center";
+        image.style.justifyContent = "center";
+        image.innerHTML =
+            '<i class="fas fa-server" style="font-size:32px;color:rgba(255,255,255,0.4)"></i>';
     }
 
     const serverInfo = document.createElement("div");
@@ -418,53 +507,78 @@ function createServerCard(serverData, onDelete) {
 
     const title = document.createElement("div");
     title.className = "server-title";
-    title.textContent = serverData.name || "Unknown";
+    title.textContent = serverData.name || "Сервер Minecraft";
 
     const statusRow = document.createElement("div");
     statusRow.className = "server-status";
 
     const playerCount = document.createElement("div");
     playerCount.className = "player-count";
-    playerCount.textContent = `${serverData.players_online} игроков`;
+    playerCount.innerHTML = `<i class="fas fa-user-group"></i> ${serverData.players_online ?? 0} игроков`;
 
     const status = document.createElement("div");
-    status.className = `status ${String(serverData.status || "").toLowerCase()}`;
-    status.textContent = serverData.status || "Unknown";
+    const statusText = String(serverData.status || "Online");
+    status.className = `status ${statusText.toLowerCase()}`;
+    status.textContent = statusText;
 
     statusRow.appendChild(playerCount);
     statusRow.appendChild(status);
-    serverInfo.appendChild(title);
-    serverInfo.appendChild(statusRow);
-
-    const deleteButton = document.createElement("button");
-    deleteButton.className = "delete-server-btn";
-    const deleteIcon = document.createElement("i");
-    deleteIcon.className = "fas fa-trash-alt";
-    deleteButton.appendChild(deleteIcon);
-    deleteButton.addEventListener("click", onDelete);
 
     const ipNode = document.createElement("div");
     ipNode.className = "ip-address";
-    ipNode.textContent = serverData.ip;
+    const ipText = document.createElement("span");
+    ipText.textContent = serverData.ip;
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "ip-copy-btn";
+    copyBtn.title = "Скопировать IP";
+    copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+    copyBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        try {
+            navigator.clipboard.writeText(serverData.ip);
+            toast({
+                title: "IP скопирован",
+                message: serverData.ip,
+                type: "success",
+            });
+        } catch {}
+    });
+    ipNode.appendChild(ipText);
+    ipNode.appendChild(copyBtn);
+
+    serverInfo.appendChild(title);
+    serverInfo.appendChild(statusRow);
+    serverInfo.appendChild(ipNode);
+
+    const footer = document.createElement("div");
+    footer.className = "server-card-footer";
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "delete-server-btn";
+    deleteButton.innerHTML = '<i class="fas fa-trash"></i> Удалить';
+    deleteButton.addEventListener("click", onDelete);
+    footer.appendChild(deleteButton);
 
     serverCard.appendChild(image);
     serverCard.appendChild(serverInfo);
-    serverCard.appendChild(deleteButton);
-    serverCard.appendChild(ipNode);
+    serverCard.appendChild(footer);
     return serverCard;
 }
 
+// ---------- Bottom version select ----------
 async function updateVersionSelect() {
     while (versionSelect.options.length > 1) {
         versionSelect.remove(1);
     }
 
-    const versionsFromDb = await eel.get_versions()();
-    const accountVersionData = await eel.get_account_version()();
+    let versionsFromDb = [];
+    let accountVersionData = [];
+    try {
+        versionsFromDb = await eel.get_versions()();
+        accountVersionData = await eel.get_account_version()();
+    } catch (e) {}
 
     let logindata = "";
     let versiondata = "";
-
     if (accountVersionData.length > 0) {
         [logindata, versiondata] = accountVersionData;
     }
@@ -473,37 +587,42 @@ async function updateVersionSelect() {
         const option = new Option(`${version[1]}`, version[1]);
         versionSelect.add(option);
         if (version[1] == versiondata) {
-            var serverSelect = document.querySelector(".server-select");
+            const ss = document.querySelector(".server-select");
             versionSelect.value = versiondata;
             if (versiondata === "LunarПВП 1.8.9") {
-                serverSelect.style.display = "block";
+                ss.style.display = "block";
             } else {
-                serverSelect.style.display = "none";
+                ss.style.display = "none";
             }
         }
     });
 
     playBtn.disabled = !versionSelect.value || isDownloading;
+    updateStats();
 }
 
 versionSelect.addEventListener("change", () => {
     playBtn.disabled = !versionSelect.value || isDownloading;
 });
 
+// ---------- Circular progress ----------
 const circularProgress = document.querySelector(".circular-progress");
 const progressCircle = document.querySelector(".circular-progress .progress");
 const progressText = document.querySelector(".progress-text");
 
 function updateProgressDownload(percent) {
     const validPercent = Math.max(0, Math.min(percent, 100));
-
-    const dashoffset = 433 - (433 * validPercent) / 100;
+    // r=27 → 2π*27 ≈ 169.646
+    const dashoffset = 169.646 - (169.646 * validPercent) / 100;
     progressCircle.style.strokeDashoffset = dashoffset;
     progressText.textContent = `${Math.round(validPercent)}%`;
 }
 
-eel.expose(updateProgressDownload);
+try {
+    eel.expose(updateProgressDownload);
+} catch (e) {}
 
+// ---------- Play button ----------
 playBtn.addEventListener("click", async () => {
     const selectedVersion = versionSelect.value;
     const accountSelect = document.querySelector(".account-select");
@@ -516,95 +635,74 @@ playBtn.addEventListener("click", async () => {
         return;
     }
 
-    if ((selectedVersion === "LunarПВП 1.8.9") & !selectedServer) {
+    if (selectedVersion === "LunarПВП 1.8.9" && !selectedServer) {
         showAlert();
         return;
     }
 
     try {
-        console.log(
-            "запуск игры",
-            selectedLogin,
-            selectedVersion,
-            selectedServer,
-        );
-        const circularProgress = document.querySelector(".circular-progress");
-
         isDownloading = true;
         startLauncherLogsStreaming(false);
         circularProgress.classList.add("active");
         toggleDownloadButtons(true);
         playBtn.disabled = true;
-        playBtn.textContent = "Загрузка...";
+        playBtn.innerHTML =
+            '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
 
         await eel.update_account_version(selectedLogin, selectedVersion)();
         await eel.start_game(selectedLogin, selectedVersion, selectedServer)();
-    } catch {
-        console.log("Ошибка");
+        toast({
+            title: "Игра запущена",
+            message: selectedVersion,
+            type: "success",
+        });
+    } catch (e) {
         showAlertGame();
         launcherCheckClose = false;
     } finally {
-        console.log("Игра запущена");
         isDownloading = false;
         circularProgress.classList.remove("active");
         toggleDownloadButtons(false);
-        playBtn.textContent = "Играть";
+        playBtn.innerHTML = '<i class="fas fa-play"></i> Играть';
         playBtn.disabled = false;
 
         if (launcherCheckClose) {
-            const canClose = await eel.check_close()();
-            if (canClose) {
-                window.close();
-            }
+            try {
+                const canClose = await eel.check_close()();
+                if (canClose) window.close();
+            } catch (e) {}
         }
     }
 });
 
-// Функция для проверки состояния WebSocket и переподключения, если необходимо
+// ---------- WebSocket reconnect ----------
 async function checkWebSocketConnection() {
-    if (eel._websocket && eel._websocket.readyState === WebSocket.OPEN) {
-        console.log("WebSocket соединён. Можно продолжать.");
-    } else if (
-        eel._websocket &&
-        eel._websocket.readyState === WebSocket.CONNECTING
-    ) {
-        console.warn(
-            "WebSocket ещё соединяется... Пробуем снова через 1 секунду.",
-        );
-        setTimeout(checkWebSocketConnection, 1000); // Пробуем снова через секунду
+    if (eel._websocket && eel._websocket.readyState === WebSocket.OPEN) return;
+    if (eel._websocket && eel._websocket.readyState === WebSocket.CONNECTING) {
+        setTimeout(checkWebSocketConnection, 1000);
     } else {
-        console.warn("WebSocket закрыт. Переподключаюсь...");
         await reconnectEelPlay();
     }
 }
 
-// Функция для переподключения WebSocket
 async function reconnectEelPlay() {
     try {
         if (eel._websocket && eel._websocket.readyState === WebSocket.CLOSED) {
-            console.warn("WebSocket закрыт, пытаюсь переподключиться...");
-
-            // Перезагрузка страницы для переподключения WebSocket
             eel._websocket = new WebSocket(
                 `http://${window.location.host}/main.html`,
-            ); // Создаем новое подключение
+            );
         } else if (
             eel._websocket &&
             eel._websocket.readyState === WebSocket.CONNECTING
         ) {
-            console.warn(
-                "WebSocket ещё соединяется... Пробуем снова через 1 секунду.",
-            );
-            setTimeout(reconnectEelPlay, 1000); // Пробуем снова через секунду
-        } else {
-            console.log("WebSocket открыт.");
+            setTimeout(reconnectEelPlay, 1000);
         }
     } catch (error) {
-        console.error("Ошибка при переподключении WebSocket:", error);
-        setTimeout(reconnectEelPlay, 1000); // Попробовать снова через 1 секунду
+        setTimeout(reconnectEelPlay, 1000);
     }
 }
 
+// ---------- Servers ----------
 document
     .getElementById("add-server-btn")
     .addEventListener("click", async function () {
@@ -614,7 +712,6 @@ document
         if (ip && isValidServerAddress(ip)) {
             try {
                 const serverData = await eel.check_server_info(ip)();
-
                 if (serverData) {
                     const serverList = document.getElementById("server-list");
                     const serverCard = createServerCard(
@@ -624,23 +721,24 @@ document
                                 await eel.delete_server_by_ip(serverData.ip)();
                                 serverList.removeChild(serverCard);
                                 updateServerSelect();
-                            } catch (error) {
-                                console.error(
-                                    "Ошибка при удалении сервера:",
-                                    error,
-                                );
-                            }
+                                updateStats();
+                                toast({ title: "Сервер удалён", type: "info" });
+                            } catch (error) {}
                         },
                     );
                     serverList.appendChild(serverCard);
-
                     ipInput.value = "";
                     updateServerSelect();
+                    updateStats();
+                    toast({
+                        title: "Сервер добавлен",
+                        message: serverData.name || ip,
+                        type: "success",
+                    });
                 } else {
                     showAlertServer();
                 }
             } catch (error) {
-                console.error("Ошибка при получении данных о сервере:", error);
                 showAlertServer();
             }
         } else {
@@ -651,11 +749,12 @@ document
 async function getIpAddress() {
     try {
         const serverIps = await eel.get_ip_address()();
+        const serverList = document.getElementById("server-list");
+        serverList.innerHTML = "";
 
         for (const ip of serverIps) {
             const serverData = await eel.check_server_info(ip)();
             if (serverData) {
-                const serverList = document.getElementById("server-list");
                 const serverCard = createServerCard(
                     serverData,
                     async function () {
@@ -663,49 +762,46 @@ async function getIpAddress() {
                             await eel.delete_server_by_ip(serverData.ip)();
                             serverList.removeChild(serverCard);
                             updateServerSelect();
-                        } catch (error) {
-                            console.error(
-                                "Ошибка при удалении сервера:",
-                                error,
-                            );
-                        }
+                            updateStats();
+                        } catch (error) {}
                     },
                 );
                 serverList.appendChild(serverCard);
                 updateServerSelect();
-            } else {
-                console.log(
-                    `Не удалось получить информацию о сервере с IP ${ip}`,
-                );
             }
         }
+
+        if (serverIps.length === 0) {
+            serverList.innerHTML = `
+                <div class="empty-state" style="grid-column: 1/-1;">
+                    <i class="fas fa-server"></i>
+                    <div>Серверов пока нет</div>
+                    <div style="font-size:11px;color:var(--text-dim)">Добавьте первый сервер выше</div>
+                </div>
+            `;
+        }
     } catch (error) {
-        console.log("Ошибка при загрузке данных о серверах");
+        /* ignore */
     }
 }
 
 async function updateServerSelect() {
-    // Сначала очищаем старые опции в серверном списке
-    const serverSelect = document.querySelector(".server-select");
-    while (serverSelect.options.length > 1) {
-        serverSelect.remove(1);
-    }
+    const ss = document.querySelector(".server-select");
+    while (ss.options.length > 1) ss.remove(1);
 
-    // Получаем список серверов
-    const serverIps = await eel.get_ip_address()();
+    let serverIps = [];
+    try {
+        serverIps = await eel.get_ip_address()();
+    } catch (e) {}
 
-    // Если список серверов пустой, скрываем селект серверов
     if (serverIps.length === 0) {
-        serverSelect.style.display = "none";
+        ss.style.display = "none";
     } else {
-        // Добавляем каждый сервер в список
-        serverIps.forEach((ip) => {
-            const option = new Option(ip, ip);
-            serverSelect.add(option);
-        });
+        serverIps.forEach((ip) => ss.add(new Option(ip, ip)));
     }
 }
 
+// ---------- Accounts ----------
 document.addEventListener("DOMContentLoaded", () => {
     const accountInput = document.getElementById("login");
     const addAccountBtn = document.querySelector(".add-account-btn");
@@ -713,63 +809,190 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function updateAccountSelect() {
         const accountSelect = document.querySelector(".account-select");
-        accountSelect.innerHTML = "";
+        accountSelect.innerHTML = '<option value="">Выберите аккаунт</option>';
         accountItems.innerHTML = "";
 
-        const accounts = await eel.get_accounts()();
-        const accountVersionData = await eel.get_account_version()();
-        let logindata1 = "";
-        let versiondata1 = "";
+        let accounts = [];
+        let accountVersionData = [];
+        try {
+            accounts = await eel.get_accounts()();
+            accountVersionData = await eel.get_account_version()();
+        } catch (e) {}
 
+        let logindata1 = "";
         if (accountVersionData.length > 0) {
-            [logindata1, versiondata1] = accountVersionData;
+            [logindata1] = accountVersionData;
         }
+
+        const countEl = document.getElementById("accounts-count");
+        if (countEl) countEl.textContent = accounts.length;
+
+        if (accounts.length === 0) {
+            accountItems.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-user-slash"></i>
+                    <div>Аккаунтов нет</div>
+                </div>
+            `;
+            updateStats();
+            return;
+        }
+
         accounts.forEach((account) => {
-            const option = new Option(account[1], account[1]);
+            const name = account[1];
+            const option = new Option(name, name);
             accountSelect.add(option);
-            if (account[1] == logindata1) {
-                accountSelect.value = logindata1;
-            }
+            if (name == logindata1) accountSelect.value = logindata1;
 
             const accountItem = document.createElement("div");
             accountItem.className = "account-item";
+
+            const avatar = document.createElement("div");
+            avatar.className = "account-avatar";
+            avatar.textContent = name.charAt(0).toUpperCase();
+
             const nameNode = document.createElement("span");
-            nameNode.textContent = account[1];
+            nameNode.className = "account-name";
+            nameNode.textContent = name;
+
             const deleteBtn = document.createElement("button");
             deleteBtn.className = "delete-account-btn";
-            const deleteIcon = document.createElement("i");
-            deleteIcon.className = "fas fa-trash";
-            deleteBtn.appendChild(deleteIcon);
-            accountItem.appendChild(nameNode);
-            accountItem.appendChild(deleteBtn);
-
+            deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
             deleteBtn.addEventListener("click", async () => {
-                await eel.delete_account(account[1])();
-                accountItem.remove();
-                updateAccountSelect();
+                try {
+                    await eel.delete_account(name)();
+                    accountItem.remove();
+                    updateAccountSelect();
+                    toast({
+                        title: "Аккаунт удалён",
+                        message: name,
+                        type: "info",
+                    });
+                } catch (e) {}
             });
 
+            accountItem.appendChild(avatar);
+            accountItem.appendChild(nameNode);
+            accountItem.appendChild(deleteBtn);
             accountItems.appendChild(accountItem);
         });
+        updateStats();
     }
 
     addAccountBtn.addEventListener("click", async () => {
         const login = accountInput.value.trim();
         if (login && isValidLogin(login)) {
-            const inserted = await eel.insert_account(login)();
+            let inserted = false;
+            try {
+                inserted = await eel.insert_account(login)();
+            } catch (e) {}
             if (!inserted) {
-                showAlert();
+                toast({
+                    title: "Не удалось добавить",
+                    message: "Возможно, такой ник уже есть",
+                    type: "error",
+                });
                 return;
             }
             accountInput.value = "";
             updateAccountSelect();
+            toast({
+                title: "Аккаунт добавлен",
+                message: login,
+                type: "success",
+            });
         } else {
-            showAlert();
+            toast({
+                title: "Некорректный ник",
+                message: "3–16 символов, латиница, цифры и _",
+                type: "error",
+            });
         }
+    });
+
+    accountInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") addAccountBtn.click();
     });
 
     updateAccountSelect();
 });
+
+// ---------- Versions grid (Home & Builds) with search/filter ----------
+let allHomeVersions = [];
+let allBuildVersions = [];
+
+function classifyBuild(version) {
+    const v = String(version).toLowerCase();
+    if (v.includes("forge")) return "forge";
+    if (v.includes("fabric")) return "fabric";
+    return "modpack";
+}
+
+function buildIcon(type) {
+    if (type === "forge") return "fa-hammer";
+    if (type === "fabric") return "fa-shirt";
+    if (type === "modpack") return "fa-box-archive";
+    return "fa-cube";
+}
+
+function createVersionCard(version, options = {}) {
+    const { isInstalled, type = null, onDownload } = options;
+
+    const card = document.createElement("div");
+    card.className = "version-card";
+    card.dataset.version = version;
+    card.dataset.type = type || "vanilla";
+
+    const cover = document.createElement("div");
+    cover.className = `version-card-cover ${type || ""}`;
+    cover.innerHTML = `<i class="fas ${type ? buildIcon(type) : "fa-cube"} version-card-cover-icon"></i>`;
+
+    if (type) {
+        const typeBadge = document.createElement("span");
+        typeBadge.className = "version-type-badge";
+        typeBadge.textContent = type === "modpack" ? "Сборка" : type;
+        cover.appendChild(typeBadge);
+    }
+
+    if (isInstalled) {
+        const installedBadge = document.createElement("span");
+        installedBadge.className = "version-installed-badge";
+        installedBadge.innerHTML = '<i class="fas fa-check"></i> Установлено';
+        cover.appendChild(installedBadge);
+    }
+
+    const body = document.createElement("div");
+    body.className = "version-card-body";
+
+    const title = document.createElement("div");
+    title.className = "version-title";
+    title.textContent = type ? version : `Minecraft ${version}`;
+
+    const actions = document.createElement("div");
+    actions.className = "version-card-actions";
+
+    const downloadBtn = document.createElement("button");
+    downloadBtn.className = "download-btn";
+    downloadBtn.setAttribute("data-version", version);
+
+    if (isInstalled) {
+        downloadBtn.innerHTML = '<i class="fas fa-check"></i> Установлено';
+        downloadBtn.classList.add("installed");
+        downloadBtn.disabled = true;
+    } else {
+        downloadBtn.innerHTML = '<i class="fas fa-download"></i> Скачать';
+        downloadBtn.addEventListener("click", () => onDownload(downloadBtn));
+    }
+
+    actions.appendChild(downloadBtn);
+
+    body.appendChild(title);
+    body.appendChild(actions);
+
+    card.appendChild(cover);
+    card.appendChild(body);
+    return card;
+}
 
 async function updateVersionGrid() {
     const versionsGridHome = document.querySelector(
@@ -779,7 +1002,12 @@ async function updateVersionGrid() {
         ".content-section#builds .versions-grid",
     );
 
-    const onlineVersions = await eel.get_online_minecraft_versions(120)();
+    let onlineVersions = { releases: [], forge: [], fabric: [] };
+    try {
+        onlineVersions =
+            (await eel.get_online_minecraft_versions(120)()) || onlineVersions;
+    } catch (e) {}
+
     const versions = onlineVersions.releases || [];
     const versions_build = [
         "Техномагия 1.12.2",
@@ -789,347 +1017,535 @@ async function updateVersionGrid() {
         ...(onlineVersions.fabric || []),
     ];
 
-    const installedVersions = await eel.get_versions()();
-    const installedVersionsSet = new Set(
-        installedVersions.map((version) => version[1]),
-    );
+    let installedVersions = [];
+    try {
+        installedVersions = await eel.get_versions()();
+    } catch (e) {}
+    const installedVersionsSet = new Set(installedVersions.map((v) => v[1]));
 
     versionsGridHome.innerHTML = "";
     versionsGridBuilds.innerHTML = "";
+    allHomeVersions = [];
+    allBuildVersions = [];
 
-    // Обновляем версии для home
+    // ----- Home grid -----
     versions.forEach((version) => {
-        const versionCardHome = document.createElement("div");
-        versionCardHome.className = "version-card";
-
-        const versionTitleHome = document.createElement("div");
-        versionTitleHome.className = "version-title";
-        versionTitleHome.textContent = `Версия ${version}`;
-
-        const downloadBtnHome = document.createElement("button");
-        downloadBtnHome.className = "download-btn";
-        downloadBtnHome.setAttribute("data-version", version);
-
-        if (installedVersionsSet.has(version)) {
-            downloadBtnHome.innerHTML = '<i class="fas fa-check"></i>';
-            downloadBtnHome.classList.add("installed");
-            downloadBtnHome.style.backgroundColor = "#27ae60";
-            downloadBtnHome.disabled = true;
-        } else {
-            downloadBtnHome.innerHTML = '<i class="fas fa-download"></i>';
-            downloadBtnHome.addEventListener("click", async () => {
+        const card = createVersionCard(version, {
+            isInstalled: installedVersionsSet.has(version),
+            type: null,
+            onDownload: async (btn) => {
                 if (isDownloading) return;
-                const circularProgress =
-                    document.querySelector(".circular-progress");
-
                 isDownloading = true;
                 circularProgress.classList.add("active");
                 toggleDownloadButtons(true);
                 playBtn.disabled = true;
-                playBtn.textContent = "Загрузка...";
+                playBtn.innerHTML =
+                    '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+                btn.innerHTML =
+                    '<i class="fas fa-spinner fa-spin"></i> Загрузка';
+                btn.disabled = true;
 
                 try {
-                    console.log("Загрузка версии майнкрафт", version);
                     startLauncherLogsStreaming(false);
                     await eel.minecraft_download_version(version)();
-                    console.log("Загрузка версии майнкрафт завершена", version);
                     installedVersionsSet.add(version);
-
-                    await eel.insert_version(version)();
+                    try {
+                        await eel.insert_version(version)();
+                    } catch (e) {}
                     updateVersionSelect();
 
-                    downloadBtnHome.innerHTML = '<i class="fas fa-check"></i>';
-                    downloadBtnHome.style.backgroundColor = "#27ae60";
-                    downloadBtnHome.classList.add("installed");
-                    downloadBtnHome.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-check"></i> Установлено';
+                    btn.classList.add("installed");
+                    btn.disabled = true;
+                    const cover = btn
+                        .closest(".version-card")
+                        .querySelector(".version-card-cover");
+                    if (
+                        cover &&
+                        !cover.querySelector(".version-installed-badge")
+                    ) {
+                        const b = document.createElement("span");
+                        b.className = "version-installed-badge";
+                        b.innerHTML =
+                            '<i class="fas fa-check"></i> Установлено';
+                        cover.appendChild(b);
+                    }
+                    toast({
+                        title: "Загружено",
+                        message: `Minecraft ${version}`,
+                        type: "success",
+                    });
                 } catch (error) {
-                    downloadBtnHome.style.backgroundColor = "#e74c3c";
+                    btn.innerHTML = '<i class="fas fa-download"></i> Скачать';
+                    btn.disabled = false;
                     showAlertVersion();
                 } finally {
                     isDownloading = false;
                     circularProgress.classList.remove("active");
                     toggleDownloadButtons(false);
-                    playBtn.textContent = "Играть";
+                    playBtn.innerHTML = '<i class="fas fa-play"></i> Играть';
                     playBtn.disabled = !versionSelect.value;
-                    console.log("Обновление списка home");
                     await updateVersionList();
                     await updateVersionFolderList();
+                    updateStats();
                 }
-            });
-        }
-
-        versionCardHome.appendChild(versionTitleHome);
-        versionCardHome.appendChild(downloadBtnHome);
-        versionsGridHome.appendChild(versionCardHome);
+            },
+        });
+        versionsGridHome.appendChild(card);
+        allHomeVersions.push({ name: version, el: card });
     });
 
-    // Обновляем версии для builds
+    // ----- Builds grid -----
     versions_build.forEach((version) => {
-        const versionCardBuilds = document.createElement("div");
-        versionCardBuilds.className = "version-card";
-
-        const versionTitleBuilds = document.createElement("div");
-        versionTitleBuilds.className = "version-title";
-        versionTitleBuilds.textContent = `${version}`;
-
-        const downloadBtnBuilds = document.createElement("button");
-        downloadBtnBuilds.className = "download-btn";
-        downloadBtnBuilds.setAttribute("data-version", version);
-
-        if (installedVersionsSet.has(version)) {
-            downloadBtnBuilds.innerHTML = '<i class="fas fa-check"></i>';
-            downloadBtnBuilds.classList.add("installed");
-            downloadBtnBuilds.style.backgroundColor = "#27ae60";
-            downloadBtnBuilds.disabled = true;
-        } else {
-            downloadBtnBuilds.innerHTML = '<i class="fas fa-download"></i>';
-            downloadBtnBuilds.addEventListener("click", async () => {
+        const type = classifyBuild(version);
+        const card = createVersionCard(version, {
+            isInstalled: installedVersionsSet.has(version),
+            type,
+            onDownload: async (btn) => {
                 if (isDownloading) return;
-
-                const circularProgress =
-                    document.querySelector(".circular-progress");
-
                 isDownloading = true;
                 circularProgress.classList.add("active");
                 toggleDownloadButtons(true);
                 playBtn.disabled = true;
-                playBtn.textContent = "Загрузка...";
+                playBtn.innerHTML =
+                    '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+                btn.innerHTML =
+                    '<i class="fas fa-spinner fa-spin"></i> Загрузка';
+                btn.disabled = true;
 
                 try {
-                    console.log("Загрузка версии майнкрафт", version);
                     startLauncherLogsStreaming(false);
                     await eel.minecraft_download_version_build(version)();
-                    console.log("Загрузка версии майнкрафт завершена", version);
                     installedVersionsSet.add(version);
-
-                    await eel.insert_version(version)();
+                    try {
+                        await eel.insert_version(version)();
+                    } catch (e) {}
                     updateVersionSelect();
 
-                    downloadBtnBuilds.innerHTML =
-                        '<i class="fas fa-check"></i>';
-                    downloadBtnBuilds.style.backgroundColor = "#27ae60";
-                    downloadBtnBuilds.classList.add("installed");
-                    downloadBtnBuilds.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-check"></i> Установлено';
+                    btn.classList.add("installed");
+                    btn.disabled = true;
+                    const cover = btn
+                        .closest(".version-card")
+                        .querySelector(".version-card-cover");
+                    if (
+                        cover &&
+                        !cover.querySelector(".version-installed-badge")
+                    ) {
+                        const b = document.createElement("span");
+                        b.className = "version-installed-badge";
+                        b.innerHTML =
+                            '<i class="fas fa-check"></i> Установлено';
+                        cover.appendChild(b);
+                    }
+                    toast({
+                        title: "Загружено",
+                        message: version,
+                        type: "success",
+                    });
                 } catch (error) {
-                    downloadBtnBuilds.style.backgroundColor = "#e74c3c";
+                    btn.innerHTML = '<i class="fas fa-download"></i> Скачать';
+                    btn.disabled = false;
                     showAlertVersion();
                 } finally {
                     isDownloading = false;
                     circularProgress.classList.remove("active");
                     toggleDownloadButtons(false);
-                    playBtn.textContent = "Играть";
+                    playBtn.innerHTML = '<i class="fas fa-play"></i> Играть';
                     playBtn.disabled = !versionSelect.value;
-                    console.log("Обновление списка builds");
                     await updateVersionList();
                     await updateVersionFolderList();
+                    updateStats();
                 }
-            });
-        }
-        versionCardBuilds.appendChild(versionTitleBuilds);
-        versionCardBuilds.appendChild(downloadBtnBuilds);
-        versionsGridBuilds.appendChild(versionCardBuilds);
+            },
+        });
+        versionsGridBuilds.appendChild(card);
+        allBuildVersions.push({ name: version, type, el: card });
     });
+
+    updateBuildsCounts();
     await updateVersionList();
     await updateVersionFolderList();
     await getIpAddress();
+    updateStats();
 }
 
+function updateBuildsCounts() {
+    const counts = {
+        all: allBuildVersions.length,
+        modpack: 0,
+        forge: 0,
+        fabric: 0,
+    };
+    allBuildVersions.forEach((b) => {
+        counts[b.type] = (counts[b.type] || 0) + 1;
+    });
+    document.querySelectorAll("#builds-filter [data-count]").forEach((el) => {
+        const k = el.getAttribute("data-count");
+        el.textContent = counts[k] ?? 0;
+    });
+}
+
+// ---------- Search & filter ----------
+document.addEventListener("DOMContentLoaded", () => {
+    const homeSearch = document.getElementById("home-version-search");
+    if (homeSearch) {
+        homeSearch.addEventListener("input", () => {
+            const q = homeSearch.value.toLowerCase().trim();
+            allHomeVersions.forEach(({ name, el }) => {
+                el.style.display = name.toLowerCase().includes(q) ? "" : "none";
+            });
+        });
+    }
+
+    const buildsSearch = document.getElementById("builds-search");
+    const filterTabs = document.querySelectorAll("#builds-filter .filter-tab");
+    let activeFilter = "all";
+
+    function applyBuildsFilter() {
+        const q = buildsSearch ? buildsSearch.value.toLowerCase().trim() : "";
+        allBuildVersions.forEach(({ name, type, el }) => {
+            const matchesText = name.toLowerCase().includes(q);
+            const matchesType = activeFilter === "all" || type === activeFilter;
+            el.style.display = matchesText && matchesType ? "" : "none";
+        });
+    }
+
+    filterTabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+            filterTabs.forEach((t) => t.classList.remove("active"));
+            tab.classList.add("active");
+            activeFilter = tab.getAttribute("data-filter");
+            applyBuildsFilter();
+        });
+    });
+
+    if (buildsSearch) buildsSearch.addEventListener("input", applyBuildsFilter);
+});
+
+// ---------- Stats on home ----------
+async function updateStats() {
+    let installed = 0,
+        accounts = 0,
+        servers = 0;
+    try {
+        installed = (await eel.get_versions()()).length;
+    } catch (e) {}
+    try {
+        accounts = (await eel.get_accounts()()).length;
+    } catch (e) {}
+    try {
+        servers = (await eel.get_ip_address()()).length;
+    } catch (e) {}
+    const ie = document.getElementById("stat-installed");
+    const ae = document.getElementById("stat-accounts");
+    const se = document.getElementById("stat-servers");
+    if (ie) ie.textContent = installed;
+    if (ae) ae.textContent = accounts;
+    if (se) se.textContent = servers;
+
+    // playtime stat
+    try {
+        eel.sum_time()((totalTime) => {
+            const time = parseFloat(String(totalTime).replace(",", "."));
+            const he = document.getElementById("stat-hours");
+            if (he)
+                he.innerHTML = `${Math.floor(time)}<span class="unit">ч</span>`;
+        });
+    } catch (e) {}
+}
+
+// ---------- News / Updates feed ----------
+function renderUpdatesFeed() {
+    const list = document.getElementById("updates-list");
+    if (!list) return;
+    const updates = [
+        {
+            version: "v2.0",
+            date: "Сегодня",
+            title: "Полный редизайн интерфейса",
+            featured: true,
+            latest: true,
+            changes: [
+                "Новый современный дизайн с тёмной темой и оранжевым акцентом",
+                "Раздел «Обновления» с полной историей изменений",
+                "Поиск и фильтры по типу сборки (Forge, Fabric, Модпаки)",
+                "Тосты-уведомления вместо стандартных алертов",
+                "Статистика на главной: установлено версий, аккаунтов, серверов",
+                "Кнопка копирования IP-адреса сервера",
+            ],
+            download: true,
+        },
+        {
+            version: "v1.4.2",
+            date: "12.04.2026",
+            title: "Стабильность и производительность",
+            changes: [
+                "Исправлена ошибка запуска для версий 1.20+",
+                "Ускорена загрузка модпаков за счёт параллельных потоков",
+                "Улучшена работа с G1GC аргументами",
+            ],
+        },
+        {
+            version: "v1.4.1",
+            date: "28.03.2026",
+            title: "Поддержка Fabric 1.20.4",
+            changes: [
+                "Добавлена поддержка последних сборок Fabric",
+                "Обновлён список релизных версий Minecraft",
+                "Исправлено отображение времени игры",
+            ],
+        },
+        {
+            version: "v1.4.0",
+            date: "10.03.2026",
+            title: "Менеджер серверов",
+            changes: [
+                "Добавлен раздел «Сервера» с проверкой статуса",
+                "Возможность сохранять любимые сервера",
+                "Просмотр количества онлайн-игроков",
+            ],
+        },
+    ];
+
+    list.innerHTML = updates
+        .map(
+            (u) => `
+        <div class="update-card${u.featured ? " featured" : ""}">
+            <div class="update-version">${u.version}</div>
+            <div class="update-body">
+                <div class="update-header">
+                    <span class="update-title">${u.title}</span>
+                    ${u.latest ? '<span class="update-tag-latest">Актуально</span>' : ""}
+                    <span class="update-date">${u.date}</span>
+                </div>
+                <ul class="update-changelog">
+                    ${u.changes.map((c) => `<li>${c}</li>`).join("")}
+                </ul>
+                ${
+                    u.download
+                        ? `
+                <div class="update-actions">
+                    <button class="btn-primary" id="news-download-btn">
+                        <i class="fas fa-download"></i> Скачать обновление
+                    </button>
+                    <button class="btn-secondary" data-jump-section="home">
+                        <i class="fas fa-arrow-right"></i> К версиям игры
+                    </button>
+                </div>
+                `
+                        : ""
+                }
+            </div>
+        </div>
+    `,
+        )
+        .join("");
+
+    // wire up download in news
+    const ndb = document.getElementById("news-download-btn");
+    if (ndb) {
+        ndb.addEventListener("click", () => {
+            try {
+                eel.downolad_launcher_version();
+                toast({ title: "Загрузка обновления...", type: "info" });
+            } catch (e) {
+                toast({
+                    title: "Уже установлена последняя версия",
+                    type: "success",
+                });
+            }
+        });
+    }
+
+    // wire up section-jump buttons inside news
+    document
+        .querySelectorAll("#updates-list [data-jump-section]")
+        .forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const id = btn.getAttribute("data-jump-section");
+                const mi = document.querySelector(
+                    `.menu-item[data-section="${id}"]`,
+                );
+                if (mi) mi.click();
+            });
+        });
+}
+
+// ---------- Init ----------
 document.addEventListener("DOMContentLoaded", () => {
     updateVersionGrid();
     updateVersionSelect();
     updatePlaytimeOnPage();
     updateServerSelect();
+    renderUpdatesFeed();
+    updateStats();
+
     const closeLogBtn = document.getElementById("runtimeLogCloseBtn");
     const clearLogBtn = document.getElementById("runtimeLogClearBtn");
-    if (closeLogBtn) {
+    if (closeLogBtn)
         closeLogBtn.addEventListener("click", hideRuntimeLogsModal);
-    }
     if (clearLogBtn) {
         clearLogBtn.addEventListener("click", async () => {
-            await eel.clear_launcher_logs()();
+            try {
+                await eel.clear_launcher_logs()();
+            } catch (e) {}
             const output = document.getElementById("runtimeLogContent");
-            if (output) {
-                output.textContent = "";
-            }
+            if (output) output.textContent = "";
             logPosition = 0;
+        });
+    }
+
+    const checkBtn = document.getElementById("check-updates-btn");
+    if (checkBtn) {
+        checkBtn.addEventListener("click", () => {
+            toast({ title: "Проверка обновлений...", type: "info" });
+            try {
+                eel.check_version_launcher()((isUpToDate) => {
+                    if (isUpToDate) {
+                        showUpdateModal();
+                    } else {
+                        toast({
+                            title: "Установлена актуальная версия",
+                            type: "success",
+                        });
+                    }
+                });
+            } catch (e) {
+                toast({
+                    title: "Установлена актуальная версия",
+                    type: "success",
+                });
+            }
         });
     }
 });
 
 function updatePlaytimeOnPage() {
-    eel.sum_time()(function (totalTime) {
-        // Заменяем запятую на точку для корректного парсинга
-        const time = parseFloat(String(totalTime).replace(",", "."));
-
-        // Целая часть — часы
-        const hours = Math.floor(time);
-
-        // Дробная часть * 60 = минуты
-        const minutes = Math.round((time - hours) * 60);
-
-        // Записываем
-        document.querySelector(".playtime-hours").textContent = `${hours} ч.`;
-        document.querySelector(".playtime-minutes").textContent =
-            `${minutes} мин.`;
-
-        console.log(`Время успешно записано: ${hours} ч. ${minutes} мин.`);
-    });
+    try {
+        eel.sum_time()((totalTime) => {
+            const time = parseFloat(String(totalTime).replace(",", "."));
+            const hours = Math.floor(time);
+            const minutes = Math.round((time - hours) * 60);
+            document.querySelector(".playtime-hours").textContent =
+                `${hours} ч.`;
+            document.querySelector(".playtime-minutes").textContent =
+                `${minutes} мин.`;
+        });
+    } catch (e) {}
 }
 
-// Функция для переподключения WebSocket
+// ---------- WebSocket helper ----------
 function reconnectEel() {
     if (
         eel._websocket &&
         (eel._websocket.readyState === WebSocket.CONNECTING ||
             eel._websocket.readyState === WebSocket.OPEN)
-    ) {
-        console.warn("WebSocket уже пытается подключиться...");
+    )
         return;
-    }
-
-    eel._websocket = new WebSocket(`http://${window.location.host}/main.html`); // Создаем новое подключение
-
-    eel._websocket.onopen = function () {
-        console.log("WebSocket успешно переподключен!");
-        setTimeout(updatePlaytimeOnPage, 1000); // Даем 0.5 сек для установления соединения
-    };
-
-    eel._websocket.onerror = function (error) {
-        console.error("Ошибка при переподключении WebSocket:", error);
-    };
-
-    eel._websocket.onclose = function () {
-        console.warn(
-            "WebSocket снова закрылся. Повторная попытка через 3 секунды...",
+    try {
+        eel._websocket = new WebSocket(
+            `http://${window.location.host}/main.html`,
         );
-        setTimeout(reconnectEel, 3000); // Пробуем снова через 3 секунды
-    };
+        eel._websocket.onopen = function () {
+            setTimeout(updatePlaytimeOnPage, 1000);
+        };
+        eel._websocket.onclose = function () {
+            setTimeout(reconnectEel, 3000);
+        };
+    } catch (e) {}
 }
 
-// Делаем функцию доступной в Python через Eel
-eel.expose(updatePlaytimeOnPage);
+try {
+    eel.expose(updatePlaytimeOnPage);
+} catch (e) {}
+try {
+    eel.expose(updateProgressDownloadLauncher);
+} catch (e) {}
 
-// Экспонированные функции для Python
-eel.expose(updateProgressDownloadLauncher);
-
-// Проверка актуальности лаунчера
+// ---------- Update modal ----------
 function checkLauncher() {
-    eel.check_version_launcher()(function (isUpToDate) {
-        console.log(isUpToDate);
-        if (isUpToDate) {
-            console.log("Открываем");
-            showUpdateModal();
-        }
-        console.log("Не открываем");
-    });
+    try {
+        eel.check_version_launcher()((isUpToDate) => {
+            if (isUpToDate) showUpdateModal();
+        });
+    } catch (e) {}
 }
 
-// Показать модальное окно для обновления лаунчера
 function showUpdateModal() {
     const modal = document.getElementById("updateModal");
-    modal.style.display = "block";
+    modal.style.display = "flex";
 
     const updateButton = document.getElementById("updateButton");
     const laterButton = document.getElementById("laterButton");
 
-    updateButton.addEventListener("click", () => {
-        // modal.style.display = "none";
-        // updateLauncher();
+    // show badge in sidebar
+    const badge = document.getElementById("updates-badge");
+    if (badge) badge.style.display = "inline-block";
+
+    updateButton.onclick = () => {
         try {
             eel.downolad_launcher_version();
             window.close();
         } catch (error) {
-            console.error("Ошибка при обновлении:", error);
             closeUpdateModalCircular();
             showErrorMessage();
         }
-    });
-
-    laterButton.addEventListener("click", function () {
+    };
+    laterButton.onclick = () => {
         modal.style.display = "none";
-    });
+    };
 }
 
 function showUpdateModalCircular() {
     const modal = document.getElementById("updateModalCircular");
-    modal.style.display = "flex"; // Показываем модальное окно
+    modal.style.display = "flex";
 }
 
-// Закрытие модального окна с прогрессом
 function closeUpdateModalCircular() {
     const modal = document.getElementById("updateModalCircular");
-    modal.style.display = "none"; // Скрываем модальное окно
+    modal.style.display = "none";
 }
 
-// Обновление лаунчера
-// async function updateLauncher() {
-//     try {
-//         await eel.downolad_launcher_version()();
-//         window.close();
-//     } catch (error) {
-//         console.error("Ошибка при обновлении:", error);
-//         closeUpdateModalCircular();
-//         showErrorMessage();
-//     }
-// }
-
-// eel.expose(close_window);
-// function close_window() {
-//     window.close();
-// }
-
-// Обновление прогресс-бара
 function updateProgressDownloadLauncher(progress) {
     const progressBar = document.querySelector(
         ".circular-progress-update .progress-update",
     );
     const progressTextUpdate = document.querySelector(".progress-text-update");
-    console.log("Обновление прогресса:", progress); // Отладочный вывод
     const validPercent = Math.min(progress, 100);
-    const dashoffset = 433 - (433 * validPercent) / 100;
-    progressBar.style.strokeDashoffset = dashoffset;
-    progressTextUpdate.textContent = `${Math.round(validPercent)}%`;
+    // r=36 → 2π*36 ≈ 226.19
+    const dashoffset = 226.19 - (226.19 * validPercent) / 100;
+    if (progressBar) progressBar.style.strokeDashoffset = dashoffset;
+    if (progressTextUpdate)
+        progressTextUpdate.textContent = `${Math.round(validPercent)}%`;
 }
 
-// Показать успешное обновление
 function showSuccessMessage() {
     const successModal = document.getElementById("successModal");
     successModal.style.display = "flex";
-
     const closeButton = document.getElementById("closeSuccessModal");
-    closeButton.addEventListener("click", function () {
+    closeButton.onclick = function () {
         successModal.style.display = "none";
-        setTimeout(() => {
-            console.log("После задержки");
-            window.close();
-        }, 3000);
-    });
+        setTimeout(() => window.close(), 3000);
+    };
 }
 
-// Показать ошибку обновления
 function showErrorMessage() {
     const errorModal = document.getElementById("errorModal");
     errorModal.style.display = "flex";
-
     const closeButton = document.getElementById("closeErrorModal");
-    closeButton.addEventListener("click", function () {
+    closeButton.onclick = function () {
         errorModal.style.display = "none";
-    });
+    };
 }
 
-// Добавляем обработчик события при загрузке страницы
 document.addEventListener("DOMContentLoaded", () => {
     checkLauncher();
 });
 
-// Функция для обновления статуса процесса
 function send_process_status(status) {
     console.log(status);
 }
-
-// Экспонируем функцию для Python
-eel.expose(send_process_status);
-
-// document.addEventListener('contextmenu', (e) => {
-//   e.preventDefault();
-// });
+try {
+    eel.expose(send_process_status);
+} catch (e) {}

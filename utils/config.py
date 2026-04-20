@@ -1,4 +1,4 @@
-VERSIONS_LAUNCHER = '1.4.9'
+VERSIONS_LAUNCHER = '1.8'
 
 minecraft_directory = r"C:\.stoneworld\SWMinecraft"
 CREATE_NO_WINDOW = 0x08000000

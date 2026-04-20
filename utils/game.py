@@ -45,6 +45,7 @@ def _update_ui_progress(progress: int):
         logger.debug("Не удалось обновить прогресс в UI", exc_info=True)
 
 def run_minecraft(login: str, version: str, server: str):
+    time.sleep(0.8)
     _set_state(STATE_STARTING, progress=5)
     _update_ui_progress(5)
     logger.info("Запуск Minecraft: login=%s version=%s server=%s", login, version, server or "-")
@@ -55,6 +56,7 @@ def run_minecraft(login: str, version: str, server: str):
             'token': '1234322354543342'
         }
         bit_checkbox, optimiz_checkbox, argument = get_bit_optimiz_argument()
+        time.sleep(0.8)
         _set_state(STATE_STARTING, progress=20)
         _update_ui_progress(20)
         
@@ -83,6 +85,7 @@ def run_minecraft(login: str, version: str, server: str):
         
         minecraft_directory_version = minecraft_directory + f"\\{version}"
         path = minecraft_directory_version + f"\\versions"
+        time.sleep(0.8)
         _set_state(STATE_STARTING, progress=35)
         _update_ui_progress(35)
 
@@ -139,6 +142,7 @@ def run_minecraft(login: str, version: str, server: str):
             minecraft_directory=minecraft_directory_version,
             options=options
         )
+        time.sleep(0.8)
         _set_state(STATE_STARTING, progress=60)
         _update_ui_progress(60)
         process = subprocess.Popen(
@@ -150,6 +154,7 @@ def run_minecraft(login: str, version: str, server: str):
             encoding="utf-8",
             errors="replace",
         )
+        time.sleep(2)
         _set_state(STATE_RUNNING, progress=100)
         _update_ui_progress(100)
         if process.stdout:
