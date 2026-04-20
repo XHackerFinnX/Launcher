@@ -286,6 +286,7 @@ let installedVersions = new Set();
 let isDownloading = false;
 let logPollTimer = null;
 let logPosition = 0;
+let externalLogsOpened = false;
 
 function showRuntimeLogsModal() {
     const modal = document.getElementById("runtimeLogModal");
@@ -320,6 +321,11 @@ async function pollLauncherLogs() {
 }
 
 function startLauncherLogsStreaming(reset = false) {
+    eel.open_external_log_viewer()();
+    if (!externalLogsOpened) {
+        eel.open_external_log_viewer()();
+        externalLogsOpened = true;
+    }
     showRuntimeLogsModal();
     const output = document.getElementById("runtimeLogContent");
     if (!output) return;
@@ -489,7 +495,7 @@ const progressCircle = document.querySelector(".circular-progress .progress");
 const progressText = document.querySelector(".progress-text");
 
 function updateProgressDownload(percent) {
-    const validPercent = Math.min(percent, 100);
+    const validPercent = Math.max(0, Math.min(percent, 100));
 
     const dashoffset = 433 - (433 * validPercent) / 100;
     progressCircle.style.strokeDashoffset = dashoffset;
@@ -773,146 +779,14 @@ async function updateVersionGrid() {
         ".content-section#builds .versions-grid",
     );
 
-    const versions = [
-        "1.20.1",
-        "1.20",
-        "1.19.4",
-        "1.19.3",
-        "1.19.2",
-        "1.19.1",
-        "1.19",
-        "1.18.2",
-        "1.18.1",
-        "1.18",
-        "1.17.1",
-        "1.17",
-        "1.16.5",
-        "1.16.4",
-        "1.16.3",
-        "1.16.2",
-        "1.16.1",
-        "1.16",
-        "1.15.2",
-        "1.15.1",
-        "1.15",
-        "1.14.4",
-        "1.14.3",
-        "1.14.2",
-        "1.14.1",
-        "1.14",
-        "1.13.2",
-        "1.13.1",
-        "1.13",
-        "1.12.2",
-        "1.12.1",
-        "1.12",
-        "1.11.2",
-        "1.11.1",
-        "1.11",
-        "1.10.2",
-        "1.10.1",
-        "1.10",
-        "1.9.4",
-        "1.9.3",
-        "1.9.2",
-        "1.9.1",
-        "1.9",
-        "1.8.9",
-        "1.8.8",
-        "1.8.7",
-        "1.8.6",
-        "1.8.5",
-        "1.8.4",
-        "1.8.3",
-        "1.8.2",
-        "1.8.1",
-        "1.8",
-        "1.7.10",
-        "1.7.9",
-        "1.7.8",
-        "1.7.7",
-        "1.7.6",
-        "1.7.5",
-        "1.7.4",
-        "1.7.3",
-        "1.7.2",
-        "1.7.1",
-        "1.7",
-        "1.6.4",
-        "1.6.3",
-        "1.6.2",
-        "1.6.1",
-        "1.6",
-        "1.5.2",
-        "1.5.1",
-        "1.5",
-        "1.4.7",
-        "1.4.6",
-        "1.4.5",
-        "1.4.4",
-        "1.4.3",
-        "1.4.2",
-        "1.4.1",
-        "1.4",
-        "1.3.2",
-        "1.3.1",
-        "1.3",
-        "1.2.5",
-        "1.2.4",
-        "1.2.3",
-        "1.2.2",
-        "1.2.1",
-        "1.1",
-        "1.0",
-    ];
+    const onlineVersions = await eel.get_online_minecraft_versions(120)();
+    const versions = onlineVersions.releases || [];
     const versions_build = [
         "Техномагия 1.12.2",
         "LunarПВП 1.8.9",
         "ПВП 1.8.9",
-        "Forge 1.21.4",
-        "Forge 1.21.3",
-        "Forge 1.21.1",
-        "Forge 1.21",
-        "Forge 1.20.6",
-        "ForgeOptifine 1.20.4",
-        "Forge 1.20.3",
-        "ForgeOptifine 1.20.2",
-        "ForgeOptifine 1.20.1",
-        "Forge 1.20",
-        "Forge 1.19.4",
-        "Forge 1.19.3",
-        "Forge 1.19.2",
-        "Forge 1.19.1",
-        "Forge 1.19",
-        "Forge 1.18.2",
-        "Forge 1.18.1",
-        "Forge 1.18",
-        "Forge 1.17.1",
-        "Forge 1.16.5",
-        "Forge 1.16.4",
-        "Forge 1.16.3",
-        "Forge 1.16.2",
-        "Forge 1.16.1",
-        "Forge 1.15.2",
-        "Forge 1.15.1",
-        "Forge 1.15",
-        "Forge 1.14.4",
-        "Forge 1.14.3",
-        "Forge 1.14.2",
-        "Forge 1.13.2",
-        "ForgeOptifine 1.12.2",
-        "Forge 1.12.1",
-        "Forge 1.12",
-        "ForgeOptifine 1.11.2",
-        "Forge 1.11",
-        "ForgeOptifine 1.10.2",
-        "Forge 1.10",
-        "ForgeOptifine 1.9.4",
-        "Forge 1.9",
-        "ForgeOptifine 1.8.9",
-        "Forge 1.8.8",
-        "Forge 1.8",
-        "ForgeOptifine 1.7.10",
+        ...(onlineVersions.forge || []),
+        ...(onlineVersions.fabric || []),
     ];
 
     const installedVersions = await eel.get_versions()();
@@ -1071,7 +945,8 @@ document.addEventListener("DOMContentLoaded", () => {
         closeLogBtn.addEventListener("click", hideRuntimeLogsModal);
     }
     if (clearLogBtn) {
-        clearLogBtn.addEventListener("click", () => {
+        clearLogBtn.addEventListener("click", async () => {
+            await eel.clear_launcher_logs()();
             const output = document.getElementById("runtimeLogContent");
             if (output) {
                 output.textContent = "";

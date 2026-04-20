@@ -17,6 +17,18 @@ current_progress = 0
 REQUEST_TIMEOUT = (5, 60)
 logger = logging.getLogger(__name__)
 
+def _resolve_forge_version(vanilla_version: str) -> str:
+    version = minecraft_launcher_lib.forge.find_forge_version(vanilla_version)
+    if version:
+        return version
+
+    available = minecraft_launcher_lib.forge.list_forge_versions()
+    prefix = f"{vanilla_version}-"
+    candidates = [item for item in available if str(item).startswith(prefix)]
+    if candidates:
+        return candidates[0]
+    raise RuntimeError(f"Не найдена совместимая Forge-версия для {vanilla_version}")
+
 def set_status(status: str):
     if status:
         logger.info("Install status: %s", status)
@@ -30,11 +42,16 @@ def set_progress(progress: int):
         current_progress = min(progress, current_max)
         percent = (current_progress / current_max) * 100
 
-        eel.updateProgressDownload(percent)
+        try:
+            eel.updateProgressDownload(percent)
+        except Exception:
+            logger.debug("Не удалось отправить прогресс в UI", exc_info=True)
 
 def set_max(new_max: int):
     global current_max
     current_max = new_max
+    if new_max <= 0:
+        return
 
 callback = {
     "setStatus": set_status,
@@ -47,7 +64,11 @@ def minecraft_download_version(version: str):
     minecraft_directory_version = minecraft_directory + f"\\{version}"
     if not os.path.exists(minecraft_directory_version):
         logger.info("Начало установки Minecraft версии: %s", version)
-        minecraft_launcher_lib.install.install_minecraft_version(version=version, minecraft_directory=minecraft_directory_version, callback=callback)
+        minecraft_launcher_lib.install.install_minecraft_version(
+            version=version,
+            minecraft_directory=minecraft_directory_version,
+            callback=callback
+        )
         logger.info("Minecraft версия установлена: %s", version)
         
 
@@ -61,15 +82,26 @@ def minecraft_download_version_build(version_fabric_forge: str):
         try:
             logger.info("Начало установки сборки: %s", version_fabric_forge)
             if name.startswith('Forge'):
-                version = minecraft_launcher_lib.forge.find_forge_version(version_null)
+                version = _resolve_forge_version(version_null)
                 minecraft_launcher_lib.forge.install_forge_version(
                     versionid=version, 
                     path=minecraft_directory_version,
                     callback=callback
                 )
-                
+            
+            elif name.startswith('Fabric'):
+                if not minecraft_launcher_lib.fabric.is_minecraft_version_supported(version_null):
+                    raise RuntimeError(f"Fabric не поддерживает версию Minecraft {version_null}")
+                loader_version = minecraft_launcher_lib.fabric.get_latest_loader_version()
+                minecraft_launcher_lib.fabric.install_fabric(
+                    minecraft_version=version_null,
+                    minecraft_directory=minecraft_directory_version,
+                    loader_version=loader_version,
+                    callback=callback
+                )
+            
             elif name.startswith('ПВП') or name.startswith('LunarПВП'):
-                version = minecraft_launcher_lib.forge.find_forge_version(version_null)
+                version = _resolve_forge_version(version_null)
                 minecraft_launcher_lib.forge.install_forge_version(
                     versionid=version, 
                     path=minecraft_directory_version,
@@ -94,6 +126,10 @@ def minecraft_download_version_build(version_fabric_forge: str):
                 download_options_pvp_1_8_9(version_fabric_forge)
                 download_client_lunar_pvp_1_8_9(version_fabric_forge)
             logger.info("Сборка установлена: %s", version_fabric_forge)
+            try:
+                eel.updateProgressDownload(100)
+            except Exception:
+                logger.debug("Не удалось отправить финальный прогресс в UI", exc_info=True)
         
         except Exception:
             logger.exception("Ошибка при установке сборки %s", version_fabric_forge)

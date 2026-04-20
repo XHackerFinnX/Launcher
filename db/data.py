@@ -1,8 +1,11 @@
 import os
 import shutil
 import logging
+import subprocess
+import sys
 import eel
 import requests
+import minecraft_launcher_lib
 
 from db.database import create_connection
 from utils.config import minecraft_directory, VERSIONS_LAUNCHER
@@ -12,6 +15,7 @@ db_path = r"C:\.stoneworld\db\launcher.db"
 log_path = r"C:\.stoneworld\logs\launcher.log"
 REQUEST_TIMEOUT = (5, 20)
 logger = logging.getLogger(__name__)
+_log_viewer_process = None
 
 @eel.expose
 def insert_version(version):
@@ -441,3 +445,71 @@ def read_launcher_logs(position=0, chunk_size=32768):
         new_position = file.tell()
 
     return {"text": text, "position": new_position}
+
+@eel.expose
+def clear_launcher_logs():
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    with open(log_path, "w", encoding="utf-8"):
+        pass
+    return {"text": "", "position": 0}
+
+
+@eel.expose
+def open_external_log_viewer():
+    global _log_viewer_process
+    viewer_exe = r"C:\.stoneworld\access\SWLogViewer.exe"
+    viewer_script = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "utils", "log_viewer.py")
+    )
+
+    try:
+        if _log_viewer_process is not None and _log_viewer_process.poll() is None:
+            return {"ok": True, "mode": "already_open"}
+
+        if os.path.exists(viewer_exe):
+            _log_viewer_process = subprocess.Popen([viewer_exe], close_fds=True)
+            return {"ok": True, "mode": "exe"}
+
+        _log_viewer_process = subprocess.Popen([sys.executable, viewer_script], close_fds=True)
+        return {"ok": True, "mode": "python"}
+    except Exception as error:
+        logger.exception("Не удалось открыть окно логов")
+        return {"ok": False, "error": str(error)}
+
+
+@eel.expose
+def get_online_minecraft_versions(limit=120):
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 120
+
+    releases = []
+    for item in minecraft_launcher_lib.utils.get_version_list():
+        if item.get("type") == "release":
+            releases.append(item["id"])
+        if len(releases) >= limit:
+            break
+
+    forge_versions = []
+    for version in releases[:50]:
+        try:
+            forge_id = minecraft_launcher_lib.forge.find_forge_version(version)
+            if forge_id:
+                forge_versions.append(f"Forge {version}")
+        except Exception:
+            continue
+
+    fabric_versions = []
+    for version in releases[:50]:
+        try:
+            if minecraft_launcher_lib.fabric.is_minecraft_version_supported(version):
+                fabric_versions.append(f"Fabric {version}")
+        except Exception:
+            continue
+
+    return {
+        "releases": releases,
+        "forge": forge_versions,
+        "fabric": fabric_versions
+    }
