@@ -28,6 +28,20 @@
     </head>
 
     <body>
+        <div id="startup-loader" class="startup-loader">
+            <div class="startup-loader-card">
+                <div class="startup-loader-logo">
+                    <i class="fas fa-cube"></i>
+                </div>
+                <h2>SLauncher загружается</h2>
+                <p id="startup-loader-text">
+                    Подготавливаем версии, аккаунты и данные лаунчера…
+                </p>
+                <div class="startup-loader-bar">
+                    <span></span>
+                </div>
+            </div>
+        </div>
         <!-- SVG defs for gradients -->
         <svg width="0" height="0" style="position: absolute" aria-hidden="true">
             <defs>
@@ -243,14 +257,30 @@
                                 мира Minecraft
                             </p>
                         </div>
-                        <div class="page-actions">
-                            <button
-                                class="btn-secondary"
-                                id="check-updates-btn"
-                            >
-                                <i class="fas fa-arrows-rotate"></i>
-                                Проверить обновления
-                            </button>
+                        <div
+                            style="
+                                display: flex;
+                                align-items: flex-end;
+                                justify-content: flex-end;
+                                flex-direction: column;
+                                line-height: 1;
+                            "
+                        >
+                            <div class="page-actions">
+                                <button
+                                    class="btn-secondary"
+                                    id="check-updates-btn"
+                                >
+                                    <i class="fas fa-arrows-rotate"></i>
+                                    Проверить обновления
+                                </button>
+                            </div>
+                            <div>
+                                <span style="font-size: 9px; color: #8b90a8"
+                                    >После обновления, рекомендуем проверить
+                                    целостность файлов</span
+                                >
+                            </div>
                         </div>
                     </div>
 
@@ -550,6 +580,43 @@
                                 </button>
                             </div>
                             <p id="folder-message" class="folder-message"></p>
+                        </div>
+
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fa fa-file"></i
+                                ></span>
+                                Проверить целостность файлов
+                            </h3>
+                            <h4 class="settings-subheader-h4">
+                                Лаунчер сверит обязательные файлы с манифестом и
+                                автоматически скачает недостающие.
+                            </h4>
+                            <div class="integrity-check-row">
+                                <button
+                                    id="check-integrity-btn"
+                                    class="integrity-check-btn"
+                                >
+                                    <i class="fas fa-shield-halved"></i>
+                                    Проверить
+                                </button>
+                                <div
+                                    id="integrity-inline-loader"
+                                    class="integrity-inline-loader"
+                                >
+                                    <span class="integrity-spinner"></span>
+                                    <span>Установка…</span>
+                                </div>
+                            </div>
+                            <p
+                                id="integrity-progress-message"
+                                class="integrity-message"
+                            ></p>
+                            <p
+                                id="integrity-result-message"
+                                class="integrity-message"
+                            ></p>
                         </div>
 
                         <div class="settings-item">

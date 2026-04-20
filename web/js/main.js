@@ -59,6 +59,50 @@ function toast({ title, message = "", type = "info", duration = 3500 }) {
     }, duration);
 }
 
+function setStartupLoaderText(text) {
+    const textEl = document.getElementById("startup-loader-text");
+    if (textEl) textEl.textContent = text;
+}
+
+function hideStartupLoader() {
+    const loader = document.getElementById("startup-loader");
+    if (!loader) return;
+    loader.classList.add("hidden");
+    setTimeout(() => loader.remove(), 450);
+}
+
+function updateIntegrityProgress(payload) {
+    const progressMessage = document.getElementById(
+        "integrity-progress-message",
+    );
+    const inlineLoader = document.getElementById("integrity-inline-loader");
+    if (!progressMessage) return;
+
+    const checked = Number(payload?.checked ?? 0);
+    const total = Number(payload?.total ?? 0);
+    const fileName = payload?.file ? ` (${payload.file})` : "";
+    const status = payload?.status || "ok";
+
+    if (status === "installing") {
+        if (inlineLoader) inlineLoader.style.display = "inline-flex";
+        progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Установка...`;
+    } else if (status === "installed") {
+        progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Установлено.`;
+    } else if (status === "error") {
+        progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Ошибка установки.`;
+    } else if (status === "skipped") {
+        progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Запись пропущена.`;
+    } else {
+        progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}.`;
+    }
+
+    progressMessage.style.display = "block";
+}
+
+try {
+    eel.expose(updateIntegrityProgress);
+} catch (e) {}
+
 // ---------- Settings: memory + behavior + java args ----------
 document.addEventListener("DOMContentLoaded", async function () {
     const memorySlider = document.getElementById("memory-slider");
@@ -186,6 +230,16 @@ document.addEventListener("DOMContentLoaded", async function () {
     const teneliaArgsToggle = document.getElementById("tenelia-args-toggle");
     const g1gcArgsToggle = document.getElementById("g1gc-args-toggle");
     const customArgsInput = document.getElementById("custom-args-input");
+    const checkIntegrityBtn = document.getElementById("check-integrity-btn");
+    const integrityInlineLoader = document.getElementById(
+        "integrity-inline-loader",
+    );
+    const integrityProgressMessage = document.getElementById(
+        "integrity-progress-message",
+    );
+    const integrityResultMessage = document.getElementById(
+        "integrity-result-message",
+    );
 
     function updateJavaArguments(activeElement) {
         const elements = [teneliaArgsToggle, g1gcArgsToggle, customArgsInput];
@@ -245,6 +299,64 @@ document.addEventListener("DOMContentLoaded", async function () {
             } catch (e) {}
         }
     });
+
+    if (checkIntegrityBtn) {
+        checkIntegrityBtn.addEventListener("click", async function () {
+            checkIntegrityBtn.disabled = true;
+            if (integrityInlineLoader)
+                integrityInlineLoader.style.display = "inline-flex";
+            if (integrityProgressMessage) {
+                integrityProgressMessage.style.display = "block";
+                integrityProgressMessage.textContent = "0/0 файлов проверено.";
+            }
+            if (integrityResultMessage) {
+                integrityResultMessage.style.display = "none";
+                integrityResultMessage.textContent = "";
+            }
+
+            try {
+                const result = await eel.check_launcher_files_integrity()();
+                if (integrityInlineLoader)
+                    integrityInlineLoader.style.display = "none";
+
+                if (integrityResultMessage) {
+                    integrityResultMessage.style.display = "block";
+                    integrityResultMessage.textContent =
+                        result?.message || "Проверка завершена.";
+                    integrityResultMessage.style.color =
+                        result?.status === "ok"
+                            ? "var(--success)"
+                            : "var(--danger)";
+                }
+
+                toast({
+                    title:
+                        result?.status === "ok"
+                            ? "Проверка завершена"
+                            : "Проверка с ошибками",
+                    message: result?.message || "",
+                    type: result?.status === "ok" ? "success" : "error",
+                });
+            } catch (error) {
+                if (integrityInlineLoader)
+                    integrityInlineLoader.style.display = "none";
+                if (integrityResultMessage) {
+                    integrityResultMessage.style.display = "block";
+                    integrityResultMessage.style.color = "var(--danger)";
+                    integrityResultMessage.textContent =
+                        "Не удалось выполнить проверку файлов.";
+                }
+                toast({
+                    title: "Ошибка проверки",
+                    message:
+                        "Проверьте интернет-соединение и повторите попытку.",
+                    type: "error",
+                });
+            } finally {
+                checkIntegrityBtn.disabled = false;
+            }
+        });
+    }
 });
 
 // ---------- Version helpers (settings page) ----------
@@ -1422,13 +1534,28 @@ function renderUpdatesFeed() {
 }
 
 // ---------- Init ----------
-document.addEventListener("DOMContentLoaded", () => {
-    updateVersionGrid();
-    updateVersionSelect();
-    updatePlaytimeOnPage();
-    updateServerSelect();
-    renderUpdatesFeed();
-    updateStats();
+document.addEventListener("DOMContentLoaded", async () => {
+    const startupSafetyTimeout = setTimeout(() => {
+        hideStartupLoader();
+    }, 15000);
+
+    try {
+        setStartupLoaderText("Загружаем версии и установленные сборки…");
+        await updateVersionGrid();
+
+        setStartupLoaderText("Загружаем аккаунты, сервера и статистику…");
+        await Promise.allSettled([
+            updateVersionSelect(),
+            updateServerSelect(),
+            updateStats(),
+        ]);
+
+        updatePlaytimeOnPage();
+        renderUpdatesFeed();
+    } finally {
+        clearTimeout(startupSafetyTimeout);
+        hideStartupLoader();
+    }
 
     const closeLogBtn = document.getElementById("runtimeLogCloseBtn");
     const clearLogBtn = document.getElementById("runtimeLogClearBtn");

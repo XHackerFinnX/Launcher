@@ -3,6 +3,7 @@ import shutil
 import logging
 import subprocess
 import sys
+from pathlib import Path
 import eel
 import requests
 import minecraft_launcher_lib
@@ -14,8 +15,18 @@ from utils.validators import is_valid_login, is_valid_server_address
 db_path = r"C:\.stoneworld\db\launcher.db"
 log_path = r"C:\.stoneworld\logs\launcher.log"
 REQUEST_TIMEOUT = (5, 20)
+FILE_INTEGRITY_MANIFEST_URL = "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/launcher-file.json"
 logger = logging.getLogger(__name__)
 _log_viewer_process = None
+
+def _download_file_to_target(url: str, target_path: Path) -> None:
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(url, stream=True, timeout=REQUEST_TIMEOUT) as response:
+        response.raise_for_status()
+        with open(target_path, "wb") as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    file.write(chunk)
 
 @eel.expose
 def insert_version(version):
@@ -212,6 +223,125 @@ def delete_versions_list(version):
         return False
     
 @eel.expose
+def check_launcher_files_integrity():
+    proxies = {"http": None, "https": None}
+    summary = {
+        "total": 0,
+        "checked": 0,
+        "installed": 0,
+        "missing_before_install": 0,
+        "status": "error",
+        "message": "Не удалось выполнить проверку файлов."
+    }
+
+    try:
+        response = requests.get(
+            FILE_INTEGRITY_MANIFEST_URL,
+            timeout=REQUEST_TIMEOUT,
+            proxies=proxies
+        )
+        response.raise_for_status()
+        manifest = response.json()
+    except requests.exceptions.RequestException:
+        logger.exception("Не удалось загрузить файл манифеста: %s", FILE_INTEGRITY_MANIFEST_URL)
+        summary["message"] = "Не удалось загрузить список файлов для проверки."
+        return summary
+    except ValueError:
+        logger.exception("Некорректный JSON в манифесте: %s", FILE_INTEGRITY_MANIFEST_URL)
+        summary["message"] = "Файл проверки повреждён (некорректный JSON)."
+        return summary
+
+    files = manifest.get("files", [])
+    if not isinstance(files, list) or not files:
+        summary["status"] = "ok"
+        summary["message"] = "Список файлов пуст. Проверять нечего."
+        return summary
+
+    total = len(files)
+    summary["total"] = total
+
+    for index, item in enumerate(files, start=1):
+        file_name = str(item.get("name", "")).strip()
+        file_path = str(item.get("path", "")).strip()
+        file_url = str(item.get("url", "")).strip()
+
+        if not file_name or not file_path or not file_url:
+            logger.warning("Пропущена некорректная запись в манифесте: %s", item)
+            summary["checked"] = index
+            try:
+                eel.updateIntegrityProgress({
+                    "checked": index,
+                    "total": total,
+                    "status": "skipped",
+                    "file": file_name or "unknown",
+                    "message": "Файл пропущен: некорректная запись."
+                })
+            except Exception:
+                logger.debug("Не удалось отправить прогресс проверки в UI", exc_info=True)
+            continue
+
+        target_path = Path(file_path) / file_name
+        exists_before = target_path.exists()
+        installed_now = False
+        state = "ok" if exists_before else "installing"
+
+        if not exists_before:
+            summary["missing_before_install"] += 1
+            try:
+                eel.updateIntegrityProgress({
+                    "checked": index - 1,
+                    "total": total,
+                    "status": "installing",
+                    "file": file_name,
+                    "message": f"Установка {file_name}..."
+                })
+            except Exception:
+                logger.debug("Не удалось отправить статус установки в UI", exc_info=True)
+
+            try:
+                _download_file_to_target(file_url, target_path)
+                installed_now = True
+                summary["installed"] += 1
+                state = "installed"
+            except requests.exceptions.RequestException:
+                logger.exception("Не удалось скачать файл %s", file_name)
+                state = "error"
+            except OSError:
+                logger.exception("Не удалось сохранить файл %s", file_name)
+                state = "error"
+
+        summary["checked"] = index
+        try:
+            eel.updateIntegrityProgress({
+                "checked": index,
+                "total": total,
+                "status": state,
+                "file": file_name,
+                "installed": installed_now
+            })
+        except Exception:
+            logger.debug("Не удалось отправить прогресс проверки в UI", exc_info=True)
+
+    if summary["missing_before_install"] == 0:
+        summary["status"] = "ok"
+        summary["message"] = "Все файлы прошли проверку."
+    elif summary["installed"] == summary["missing_before_install"]:
+        summary["status"] = "ok"
+        summary["message"] = (
+            f"Проверка завершена. Установлено {summary['installed']} из "
+            f"{summary['missing_before_install']} отсутствующих файлов."
+        )
+    else:
+        failed = summary["missing_before_install"] - summary["installed"]
+        summary["status"] = "partial"
+        summary["message"] = (
+            f"Проверка завершена частично: установлено {summary['installed']}, "
+            f"ошибок установки: {failed}."
+        )
+
+    return summary
+    
+@eel.expose
 def check_server_info(ip):
     ip = str(ip).strip()
     if not is_valid_server_address(ip):
@@ -228,16 +358,26 @@ def check_server_info(ip):
                 status = 'Online'
             else:
                 status = 'Offline'
-                
-            server_info = {
-                "ip": ip,
-                "name": data.get('motd', 'Unknown').get('clean', 'Unknown'),
-                "players_online": data.get('players', {}).get('online', 0),
-                "players_max": data.get('players', {}).get('max', 0),
-                "version": data.get('version', 'Unknown').get('name_raw', 'Unknown'),
-                "status": status,
-                "icon": data['icon']
-            }
+            
+            try:
+                server_info = {
+                    "ip": ip,
+                    "name": data.get('motd', 'Unknown').get('clean', 'Unknown'),
+                    "players_online": data.get('players', {}).get('online', 0),
+                    "players_max": data.get('players', {}).get('max', 0),
+                    "version": data.get('version', 'Unknown').get('name_raw', 'Unknown'),
+                    "status": status,
+                    "icon": data['icon']
+                }
+            except Exception:
+                server_info = {
+                    "ip": ip,
+                    "name": data['host'],
+                    "players_online": 0,
+                    "players_max": 0,
+                    "version": 'Сервер не отвечает',
+                    "status": status
+                }
             exists = check_ip_address(ip)
             if not exists:
                 add_ip_address(ip)
