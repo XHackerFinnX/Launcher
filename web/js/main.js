@@ -120,6 +120,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             bit_checkbox: 0,
             optimiz_checkbox: 0,
             argument: "",
+            open_log_viewer_checkbox: 1,
         };
     }
 
@@ -183,6 +184,22 @@ document.addEventListener("DOMContentLoaded", async function () {
             } catch (e) {}
         });
     });
+
+    // ----- External log viewer -----
+    const openLogViewerToggle = document.getElementById(
+        "open-log-viewer-toggle",
+    );
+    openLogViewerEnabled = settings.open_log_viewer_checkbox !== 0;
+    if (openLogViewerToggle) {
+        openLogViewerToggle.checked = openLogViewerEnabled;
+        openLogViewerToggle.addEventListener("change", function () {
+            const value = this.checked ? 1 : 0;
+            openLogViewerEnabled = this.checked;
+            try {
+                eel.update_setting_open_log_viewer_checkbox(value)();
+            } catch (e) {}
+        });
+    }
 
     // ----- Bit version & optimization -----
     const bitVersionToggle = document.getElementById("bit-version-toggle");
@@ -477,6 +494,7 @@ let isDownloading = false;
 let logPollTimer = null;
 let logPosition = 0;
 let externalLogsOpened = false;
+let openLogViewerEnabled = true;
 
 function showRuntimeLogsModal() {
     const modal = document.getElementById("runtimeLogModal");
@@ -511,10 +529,7 @@ async function pollLauncherLogs() {
 }
 
 function startLauncherLogsStreaming(reset = false) {
-    try {
-        eel.open_external_log_viewer()();
-    } catch (e) {}
-    if (!externalLogsOpened) {
+    if (openLogViewerEnabled && !externalLogsOpened) {
         try {
             eel.open_external_log_viewer()();
         } catch (e) {}

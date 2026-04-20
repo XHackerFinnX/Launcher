@@ -135,14 +135,38 @@ def insert_setting(memory, checkbox, bit_checkbox, optimiz_checkbox, argument):
                    checkbox,
                    bit_checkbox,
                    optimiz_checkbox,
-                   argument) 
-                   VALUES (?, ?, ?, ?, ?)''', (memory, checkbox, bit_checkbox, optimiz_checkbox, argument))
+                   argument,
+                   open_log_viewer_checkbox) 
+                   VALUES (?, ?, ?, ?, ?, ?)''', (memory, checkbox, bit_checkbox, optimiz_checkbox, argument, 1))
     conn.commit()
+    conn.close()
+    
+def ensure_settings_row():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM settings LIMIT 1")
+    exists = cursor.fetchone()
+    if not exists:
+        cursor.execute(
+            '''
+            INSERT INTO settings (
+                memory,
+                checkbox,
+                bit_checkbox,
+                optimiz_checkbox,
+                argument,
+                open_log_viewer_checkbox
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ''',
+            (2048, 0, 0, 0, "", 1)
+        )
+        conn.commit()
     conn.close()
 
 @eel.expose
 def update_setting_memory(memory):
     """Обновление данных в таблице settings memory"""
+    ensure_settings_row()
     conn = create_connection(db_path)
     cursor = conn.cursor()
     cursor.execute('''UPDATE settings SET memory = ?''', (int(memory),))
@@ -152,6 +176,7 @@ def update_setting_memory(memory):
 @eel.expose
 def update_setting_checkbox(value):
     """Обновление состояния чекбокса в базе данных (0 или 1)."""
+    ensure_settings_row()
     conn = create_connection(db_path)
     cursor = conn.cursor()
     cursor.execute('''UPDATE settings SET checkbox = ?''', (int(value),))
@@ -160,6 +185,7 @@ def update_setting_checkbox(value):
     
 @eel.expose
 def update_setting_bit_checkbox(value):
+    ensure_settings_row()
     conn = create_connection(db_path)
     cursor = conn.cursor()
     cursor.execute('''UPDATE settings SET bit_checkbox = ?''', (int(value),))
@@ -168,6 +194,7 @@ def update_setting_bit_checkbox(value):
     
 @eel.expose
 def update_setting_optimiz_checkbox(value):
+    ensure_settings_row()
     conn = create_connection(db_path)
     cursor = conn.cursor()
     cursor.execute('''UPDATE settings SET optimiz_checkbox = ?''', (int(value),))
@@ -176,9 +203,19 @@ def update_setting_optimiz_checkbox(value):
     
 @eel.expose
 def update_setting_argument(value):
+    ensure_settings_row()
     conn = create_connection(db_path)
     cursor = conn.cursor()
     cursor.execute('''UPDATE settings SET argument = ?''', (value,))
+    conn.commit()
+    conn.close()
+    
+@eel.expose
+def update_setting_open_log_viewer_checkbox(value):
+    ensure_settings_row()
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''UPDATE settings SET open_log_viewer_checkbox = ?''', (int(value),))
     conn.commit()
     conn.close()
     
@@ -186,10 +223,16 @@ def update_setting_argument(value):
 @eel.expose
 def get_settings():
     """Получение всех настроек из таблицы settings."""
+    ensure_settings_row()
     conn = create_connection(db_path)
     cursor = conn.cursor()
     
-    cursor.execute('''SELECT memory, checkbox, bit_checkbox, optimiz_checkbox, argument FROM settings''')
+    cursor.execute(
+        '''
+        SELECT memory, checkbox, bit_checkbox, optimiz_checkbox, argument, open_log_viewer_checkbox
+        FROM settings
+        '''
+    )
     setting = cursor.fetchone()
     conn.close()
     
@@ -199,7 +242,8 @@ def get_settings():
             "checkbox": setting[1],
             "bit_checkbox": setting[2],
             "optimiz_checkbox": setting[3],
-            "argument": setting[4]
+            "argument": setting[4],
+            "open_log_viewer_checkbox": setting[5] if setting[5] is not None else 1
         }
     else:
         return {
@@ -207,7 +251,8 @@ def get_settings():
             "checkbox": 0,
             "bit_checkbox": 0,
             "optimiz_checkbox": 0,
-            "argument": ""
+            "argument": "",
+            "open_log_viewer_checkbox": 1
         }
     
 @eel.expose

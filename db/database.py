@@ -37,7 +37,8 @@ def create_table_settings(conn):
                             checkbox INTEGER,
                             bit_checkbox INTEGER,
                             optimiz_checkbox INTEGER,
-                            argument TEXT)''')
+                            argument TEXT,
+                            open_log_viewer_checkbox INTEGER DEFAULT 1)''')
         conn.commit()
     except sqlite3.Error as e:
         print(f"Ошибка при создании таблицы settings: {e}")
@@ -86,6 +87,20 @@ def apply_migrations(conn):
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_servers_ip ON servers(ip)"
         )
         cursor.execute("PRAGMA user_version = 1")
+        conn.commit()
+        
+    if version < 2:
+        cursor.execute("PRAGMA table_info(settings)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "open_log_viewer_checkbox" not in columns:
+            cursor.execute(
+                "ALTER TABLE settings ADD COLUMN open_log_viewer_checkbox INTEGER DEFAULT 1"
+            )
+            cursor.execute(
+                "UPDATE settings SET open_log_viewer_checkbox = 1 "
+                "WHERE open_log_viewer_checkbox IS NULL"
+            )
+        cursor.execute("PRAGMA user_version = 2")
         conn.commit()
 
 
