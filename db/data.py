@@ -228,12 +228,13 @@ def check_server_info(ip):
                 status = 'Online'
             else:
                 status = 'Offline'
+                
             server_info = {
                 "ip": ip,
-                "name": data.get('version', 'Unknown').get('name_raw', 'Unknown'),
+                "name": data.get('motd', 'Unknown').get('clean', 'Unknown'),
                 "players_online": data.get('players', {}).get('online', 0),
                 "players_max": data.get('players', {}).get('max', 0),
-                "version": data.get('version', 'Unknown'),
+                "version": data.get('version', 'Unknown').get('name_raw', 'Unknown'),
                 "status": status,
                 "icon": data['icon']
             }

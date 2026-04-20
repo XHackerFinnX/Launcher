@@ -1261,8 +1261,8 @@ function renderUpdatesFeed() {
     if (!list) return;
     const updates = [
         {
-            version: "v2.0",
-            date: "Сегодня",
+            version: "v1.8",
+            date: "20.04.2026",
             title: "Полный редизайн интерфейса",
             featured: true,
             latest: true,
@@ -1277,8 +1277,8 @@ function renderUpdatesFeed() {
             download: true,
         },
         {
-            version: "v1.4.2",
-            date: "12.04.2026",
+            version: "v1.7",
+            date: "19.04.2026",
             title: "Стабильность и производительность",
             changes: [
                 "Исправлена ошибка запуска для версий 1.20+",
@@ -1287,8 +1287,8 @@ function renderUpdatesFeed() {
             ],
         },
         {
-            version: "v1.4.1",
-            date: "28.03.2026",
+            version: "v1.6.2",
+            date: "22.02.2026",
             title: "Поддержка Fabric 1.20.4",
             changes: [
                 "Добавлена поддержка последних сборок Fabric",
@@ -1297,14 +1297,50 @@ function renderUpdatesFeed() {
             ],
         },
         {
-            version: "v1.4.0",
-            date: "10.03.2026",
+            version: "v1.6",
+            date: "12.08.2025",
             title: "Менеджер серверов",
             changes: [
                 "Добавлен раздел «Сервера» с проверкой статуса",
                 "Возможность сохранять любимые сервера",
                 "Просмотр количества онлайн-игроков",
             ],
+        },
+        {
+            version: "v1.5.12",
+            date: "11.08.2025",
+            title: "Маленькие исправления",
+            changes: [],
+        },
+        {
+            version: "v1.5.4",
+            date: "10.07.2025",
+            title: "Исправлен запуск пвп сборки",
+            changes: [],
+        },
+        {
+            version: "v1.5.2",
+            date: "09.07.2025",
+            title: "Добавлены Forge и Optifine сборки и вводятся готовые сборки",
+            changes: ["Добавляется готовая сборка ПВП 1.8.9"],
+        },
+        {
+            version: "v1.4.9",
+            date: "22.03.2025",
+            title: "Стабильная версия лаунчера для игры по ваниле",
+            changes: [],
+        },
+        {
+            version: "v1.3",
+            date: "24.02.2025",
+            title: "Крупные исправления багов",
+            changes: [],
+        },
+        {
+            version: "v1.0",
+            date: "21.02.2025",
+            title: "Первый релиз лаунчера",
+            changes: [],
         },
     ];
 
@@ -1347,8 +1383,21 @@ function renderUpdatesFeed() {
     if (ndb) {
         ndb.addEventListener("click", () => {
             try {
-                eel.downolad_launcher_version();
-                toast({ title: "Загрузка обновления...", type: "info" });
+                eel.check_version_launcher()((isUpToDate) => {
+                    if (isUpToDate) {
+                        eel.downolad_launcher_version();
+                        window.close();
+                        toast({
+                            title: "Загрузка обновления...",
+                            type: "info",
+                        });
+                    } else {
+                        toast({
+                            title: "Установлена актуальная версия",
+                            type: "success",
+                        });
+                    }
+                });
             } catch (e) {
                 toast({
                     title: "Уже установлена последняя версия",
