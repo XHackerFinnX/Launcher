@@ -1387,6 +1387,19 @@ function renderUpdatesFeed() {
     if (!list) return;
     const updates = [
         {
+            version: "v1.8.5",
+            date: "25.04.2026",
+            title: "Fix сборки LunarПВП 1.8.9",
+            featured: true,
+            latest: true,
+            changes: [
+                "Исправил сборку LunarПВП 1.8.9. Теперь можно заходить на сервера используя крякнутую версию Lunar",
+                "Убрал сборку Техномагия 1.12.2",
+                "Пофиксил запуск приоритета загрузки Лаунчера. Запускается через edge браузер",
+            ],
+            download: true,
+        },
+        {
             version: "v1.8",
             date: "20.04.2026",
             title: "Полный редизайн интерфейса",
