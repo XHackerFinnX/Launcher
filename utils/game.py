@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 import minecraft_launcher_lib
 import subprocess
@@ -10,6 +11,7 @@ import logging
 from uuid import uuid1
 from db.data import get_memory, get_checkbox, get_bit_optimiz_argument
 from utils.config import minecraft_directory, CREATE_NO_WINDOW
+from utils.java_finder import find_java_8
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +115,15 @@ def run_minecraft(login: str, version: str, server: str):
                         break
                         
         if version.startswith('LunarПВП'):
+            java_path = find_java_8(prefer_javaw=True)
+            if not java_path:
+                raise RuntimeError(
+                    "Java 8 не найдена.\n\n"
+                    "Для запуска Minecraft 1.8.9 / LunarПВП нужна Java 8 x64."
+                )
+
+            logger.info("Найдена Java 8: %s", java_path)
+            options["executablePath"] = java_path
             version = 'Flight Client for Cracked'
             file_path = r"C:\.stoneworld\SWMinecraft\LunarПВП 1.8.9\versions\Flight Client for Cracked\Flight Client for Cracked.json"
             with open(file_path, 'r', encoding='utf-8') as file:
@@ -121,16 +132,16 @@ def run_minecraft(login: str, version: str, server: str):
                     minecraft_arguments = data["minecraftArguments"]
                     
                     # Проверяем, существует ли уже --server в minecraftArguments
-                    # if "--server" in minecraft_arguments:
-                    #     # Заменяем старый IP адрес на новый
-                    #     updated_arguments = re.sub(r"--server\s+[^\s]+", f"--server {server}", minecraft_arguments)
-                    # else:
+                    if "--server" in minecraft_arguments:
+                    # Заменяем старый IP адрес на новый
+                        updated_arguments = re.sub(r"--server\s+[^\s]+", f"--server {server}", minecraft_arguments)
+                    else:
                     #     # Добавляем новый IP адрес в конец строки
-                    #     updated_arguments = minecraft_arguments + f" --server {server}"
+                        updated_arguments = minecraft_arguments + f" --server {server}"
                     
                     # Обновляем minecraftArguments новым значением
-                    # data["minecraftArguments"] = updated_arguments
-                    data["minecraftArguments"] = minecraft_arguments
+                    data["minecraftArguments"] = updated_arguments
+                    # data["minecraftArguments"] = minecraft_arguments
                     
             with open(file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, ensure_ascii=False, indent=4)

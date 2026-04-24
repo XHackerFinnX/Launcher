@@ -10,6 +10,7 @@ from utils.logger import setup_logging
 from utils.download import downolad_launcher_version, minecraft_download_version, minecraft_download_version_build
 from utils.game import start_game, check_close
 from utils.folder import open_folder_version
+from utils.java_finder import find_java_8
 from db.data import (
     insert_version, get_versions, insert_account, delete_account, get_accounts,
     update_account_version, get_account_version, update_setting_memory,
@@ -39,16 +40,13 @@ def main():
     browser = find_browser()
     pos_x, pos_y = get_center_position(width, height)
     
-    try:
-        eel.start(
-            file_html,
-            mode=browser,
-            port=0,
-            size=(width, height),
-            position=(pos_x, pos_y),
-        )
-    except KeyboardInterrupt:
-        logging.getLogger(__name__).info("Launcher stopped by user (KeyboardInterrupt).")
+    eel.start(
+        file_html,
+        mode=browser,
+        port=0,
+        size=(width, height),
+        position=(pos_x, pos_y),
+    )
 
 if __name__ == '__main__':
     main()

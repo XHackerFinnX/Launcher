@@ -80,7 +80,7 @@ def download_options_pvp_1_8_9(name):
 def download_client_lunar_pvp_1_8_9(name):
     url_folder = f"C:\\.stoneworld\\SWMinecraft\\{name}\\versions"
     if download_zip(
-        'https://download2389.mediafire.com/xang3wk7x8ugoVSJxnH_siGedabNUmFvoTrX2nNOS-CFlMYdIh9uu4dE1pa7N5WtH1N-ncCp_Ld4BaPF9ZXG5RAZMrd8wiyFS25yLqw40HdwMPv0l6Igq0BD80ydPCS4FPlTe-SuGciIroZ_UPtmtCDN_V0r-HEFqxofxtSJ5YgH-O-W/ocangmmc8mvie8d/FlightClient1.8.9.zip',
+        'https://github.com/XHackerFinnX/SLauncher/releases/download/FlightClient/FlightClient1.8.9.zip',
         url_folder,
         'FlightClientforCracked.zip'
     ): 

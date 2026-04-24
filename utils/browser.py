@@ -6,6 +6,10 @@ def find_browser():
     """ Проверяет, установлен ли Chrome, Firefox, Edge или Opera, и возвращает путь. """
     if sys.platform == "win32":
         browsers = {
+            "edge": [
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+            ],
             "chrome": [
                 r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                 r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
@@ -18,11 +22,7 @@ def find_browser():
                 r"C:\Users\{}\AppData\Local\Programs\Opera\launcher.exe".format(os.getlogin()),
                 r"C:\Program Files\Opera\launcher.exe",
                 r"C:\Program Files (x86)\Opera\launcher.exe"
-            ],
-            "edge": [
-                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
-            ],
+            ]
         }
         for browser, paths in browsers.items():
             for path in paths:

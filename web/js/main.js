@@ -1137,7 +1137,6 @@ async function updateVersionGrid() {
 
     const versions = onlineVersions.releases || [];
     const versions_build = [
-        "Техномагия 1.12.2",
         "LunarПВП 1.8.9",
         "ПВП 1.8.9",
         ...(onlineVersions.forge || []),
