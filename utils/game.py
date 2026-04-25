@@ -25,6 +25,15 @@ _launch_error = ""
 _launch_progress = 0
 _state_lock = threading.Lock()
 
+def _memory_mb_to_gb(memory_mb: int | float | None) -> int:
+    try:
+        value = int(memory_mb or 0)
+    except (TypeError, ValueError):
+        value = 0
+    if value <= 0:
+        return 2
+    return max(1, round(value / 1024))
+
 
 def _set_state(state: str, error: str = "", progress: int | None = None):
     global _launch_state, _launch_error, _launch_progress
@@ -62,19 +71,16 @@ def run_minecraft(login: str, version: str, server: str):
         _set_state(STATE_STARTING, progress=20)
         _update_ui_progress(20)
         
-        memory = get_memory()[0]
-        if memory >= 10_000:
-            memory = str(memory)[:2]
-        else:
-            memory = str(memory)[0]
+        memory_row = get_memory()
+        memory_gb = _memory_mb_to_gb(memory_row[0] if memory_row else 2048)
             
         if argument == '':
             if bit_checkbox == 1 and optimiz_checkbox == 0:
-                options["jvmArguments"] = ['-d64', f"-Xmx{memory}G", f"-Xms{memory}G"]
+                options["jvmArguments"] = ['-d64', f"-Xmx{memory_gb}G", f"-Xms{memory_gb}G"]
             elif bit_checkbox == 1 and optimiz_checkbox == 1:
                 options["jvmArguments"] = ['-d64', "-Xmx8G", "-Xms4G", "-Xmn6G", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseG1GC", "-XX:ParallelGCThreads=8", "-XX:+AggressiveOpts"]
             else:
-                options["jvmArguments"] = [f"-Xmx{memory}G", f"-Xms{memory}G"]
+                options["jvmArguments"] = [f"-Xmx{memory_gb}G", f"-Xms{memory_gb}G"]
         
         elif argument == 'Tenelia':
             options["jvmArguments"] = ['-Xmx4G', '-Xms4G', '-Xmn768m', '-XX:+DisableExplicitGC', '-XX:+UseConcMarkSweepGC', '-XX:+UseParNewGC', '-XX:+UseNUMA', '-XX:+CMSParallelRemarkEnabled', '-XX:MaxTenuringThreshold=15', '-XX:MaxGCPauseMillis=30', '-XX:GCPauseIntervalMillis=150', '-XX:+UseAdaptiveGCBoundary', '-XX:-UseGCOverheadLimit', '-XX:+UseBiasedLocking', '-XX:SurvivorRatio=8', '-XX:TargetSurvivorRatio=90', '-XX:MaxTenuringThreshold=15', '-Dfml.ignorePatchDiscrepancies=true', '-Dfml.ignoreInvalidMinecraftCertificates=true', '-XX:+UseFastAccessorMethods', '-XX:+UseCompressedOops', '-XX:+OptimizeStringConcat', '-XX:+AggressiveOpts', '-XX:ReservedCodeCacheSize=2048m', '-XX:+UseCodeCacheFlushing', '-XX:SoftRefLRUPolicyMSPerMB=10000', '-XX:ParallelGCThreads=10', '-XX:+AlwaysPreTouch', '-XX:+ParallelRefProcEnabled', '-XX:+PerfDisableSharedMem', '-XX:-UsePerfData']

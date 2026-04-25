@@ -354,11 +354,20 @@ select {
     font-weight: 600;
 }
 
+.playtime-value-time {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+    margin-top: 2px;
+}
+
 .playtime-value {
     font-size: 13px;
     color: var(--text);
     font-weight: 600;
     margin-top: 2px;
+    display: flex;
+    flex-direction: column;
 }
 
 .playtime-divider {

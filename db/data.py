@@ -49,7 +49,14 @@ def get_versions():
     """Получение всех версий из базы данных."""
     conn = create_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute('''SELECT * FROM versions ORDER BY version DESC''')
+    cursor.execute(
+        '''
+        SELECT MIN(id) AS id, version
+        FROM versions
+        GROUP BY version
+        ORDER BY version DESC
+        '''
+    )
     versions_list = cursor.fetchall()
     conn.close()
     return versions_list
@@ -94,14 +101,10 @@ def update_account_version(login, version):
         return False
     conn = create_connection(db_path)
     cursor = conn.cursor()
-    # Аккаунт
+    # Аккаунт + версия в одной транзакции
     cursor.execute('''UPDATE accounts SET choose = 0''')
-    conn.commit()
     cursor.execute('''UPDATE accounts SET choose = 1 WHERE login = ?''', (login,))
-    conn.commit()
-    # Версия
     cursor.execute('''UPDATE versions SET choose = 0''')
-    conn.commit()
     cursor.execute('''UPDATE versions SET choose = 1 WHERE version = ?''', (version,))
     conn.commit()
     conn.close()
@@ -144,80 +147,71 @@ def insert_setting(memory, checkbox, bit_checkbox, optimiz_checkbox, argument):
 def ensure_settings_row():
     conn = create_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT 1 FROM settings LIMIT 1")
-    exists = cursor.fetchone()
-    if not exists:
-        cursor.execute(
-            '''
-            INSERT INTO settings (
-                memory,
-                checkbox,
-                bit_checkbox,
-                optimiz_checkbox,
-                argument,
-                open_log_viewer_checkbox
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            ''',
-            (2048, 0, 0, 0, "", 1)
+    cursor.execute(
+        '''
+        INSERT INTO settings (
+            memory,
+            checkbox,
+            bit_checkbox,
+            optimiz_checkbox,
+            argument,
+            open_log_viewer_checkbox
         )
-        conn.commit()
+        SELECT ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (SELECT 1 FROM settings)
+        ''',
+        (2048, 0, 0, 0, "", 1)
+    )
+    conn.commit()
     conn.close()
 
+def _update_setting_field(field: str, value):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        '''
+        INSERT INTO settings (
+            memory,
+            checkbox,
+            bit_checkbox,
+            optimiz_checkbox,
+            argument,
+            open_log_viewer_checkbox
+        )
+        SELECT ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (SELECT 1 FROM settings)
+        ''',
+        (2048, 0, 0, 0, "", 1)
+    )
+    cursor.execute(f"UPDATE settings SET {field} = ?", (value,))
+    conn.commit()
+    conn.close()
+    
 @eel.expose
 def update_setting_memory(memory):
     """Обновление данных в таблице settings memory"""
-    ensure_settings_row()
-    conn = create_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute('''UPDATE settings SET memory = ?''', (int(memory),))
-    conn.commit()
-    conn.close()
+    _update_setting_field("memory", int(memory))
     
 @eel.expose
 def update_setting_checkbox(value):
     """Обновление состояния чекбокса в базе данных (0 или 1)."""
-    ensure_settings_row()
-    conn = create_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute('''UPDATE settings SET checkbox = ?''', (int(value),))
-    conn.commit()
-    conn.close()
+    _update_setting_field("checkbox", int(value))
     
 @eel.expose
 def update_setting_bit_checkbox(value):
-    ensure_settings_row()
-    conn = create_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute('''UPDATE settings SET bit_checkbox = ?''', (int(value),))
-    conn.commit()
-    conn.close()
+    _update_setting_field("bit_checkbox", int(value))
     
 @eel.expose
 def update_setting_optimiz_checkbox(value):
-    ensure_settings_row()
-    conn = create_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute('''UPDATE settings SET optimiz_checkbox = ?''', (int(value),))
-    conn.commit()
-    conn.close()
+    _update_setting_field("optimiz_checkbox", int(value))
     
 @eel.expose
 def update_setting_argument(value):
-    ensure_settings_row()
-    conn = create_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute('''UPDATE settings SET argument = ?''', (value,))
-    conn.commit()
-    conn.close()
+    _update_setting_field("argument", value)
     
 @eel.expose
 def update_setting_open_log_viewer_checkbox(value):
-    ensure_settings_row()
-    conn = create_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute('''UPDATE settings SET open_log_viewer_checkbox = ?''', (int(value),))
-    conn.commit()
-    conn.close()
+    _update_setting_field("open_log_viewer_checkbox", int(value))
     
     
 @eel.expose
@@ -439,7 +433,7 @@ def check_server_info(ip):
 def get_ip_address():
     conn = create_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute('''SELECT ip FROM servers''')
+    cursor.execute('''SELECT DISTINCT ip FROM servers ORDER BY ip COLLATE NOCASE''')
     server_ips = cursor.fetchall()
     conn.close()
     return [ip[0] for ip in server_ips]
@@ -522,10 +516,15 @@ def delete_version_error(version):
     conn.commit()
     conn.close()
     
+@eel.expose
+def delete_version_record(version):
+    delete_version_error(version)
+    return True
+    
 def add_ip_address(ip_address):
     conn = create_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute('''INSERT INTO servers (ip) VALUES (?)''', (ip_address,))
+    cursor.execute('''INSERT OR IGNORE INTO servers (ip) VALUES (?)''', (ip_address,))
     conn.commit()
     conn.close()
     

@@ -491,6 +491,9 @@ const serverSelect = document.querySelector(".server-select");
 const playBtn = document.querySelector(".play-btn");
 let downloadButtons = document.querySelectorAll(".download-btn");
 let isDownloading = false;
+let activeDownloadTask = null;
+const downloadQueue = [];
+const queuedDownloadKeys = new Set();
 let logPollTimer = null;
 let logPosition = 0;
 let externalLogsOpened = false;
@@ -555,6 +558,118 @@ function toggleDownloadButtons(disable) {
     });
 }
 
+function getDownloadTaskKey(version, isBuild) {
+    return `${isBuild ? "build" : "vanilla"}:${version}`;
+}
+
+function setDownloadButtonLabel(btn, html, disabled) {
+    if (!btn) return;
+    btn.innerHTML = html;
+    btn.disabled = disabled;
+}
+
+function dequeueByKey(taskKey) {
+    const index = downloadQueue.findIndex((task) => task.key === taskKey);
+    if (index === -1) return null;
+    const [task] = downloadQueue.splice(index, 1);
+    queuedDownloadKeys.delete(taskKey);
+    return task;
+}
+
+async function runNextDownloadTask() {
+    if (isDownloading || downloadQueue.length === 0) return;
+    const nextTask = downloadQueue.shift();
+    if (!nextTask) return;
+    queuedDownloadKeys.delete(nextTask.key);
+    await executeDownloadTask(nextTask);
+}
+
+async function executeDownloadTask(task) {
+    if (!task?.run) return;
+    isDownloading = true;
+    activeDownloadTask = task;
+    task.cancelRequested = false;
+    try {
+        await task.run(task);
+    } finally {
+        activeDownloadTask = null;
+        isDownloading = false;
+        await runNextDownloadTask();
+    }
+}
+
+function enqueueDownloadTask(task) {
+    if (!task) return;
+
+    if (activeDownloadTask && activeDownloadTask.key === task.key) {
+        activeDownloadTask.cancelRequested = true;
+        toast({
+            title: "Отмена загрузки",
+            message: `${task.version} будет удалена после завершения текущего шага`,
+            type: "info",
+        });
+        return;
+    }
+
+    if (queuedDownloadKeys.has(task.key)) {
+        dequeueByKey(task.key);
+        setDownloadButtonLabel(
+            task.button,
+            '<i class="fas fa-download"></i> Скачать',
+            false,
+        );
+        toast({
+            title: "Удалено из очереди",
+            message: task.version,
+            type: "info",
+        });
+        return;
+    }
+
+    if (isDownloading) {
+        downloadQueue.push(task);
+        queuedDownloadKeys.add(task.key);
+        setDownloadButtonLabel(
+            task.button,
+            '<i class="fas fa-clock"></i> В очереди',
+            false,
+        );
+        toast({
+            title: "Добавлено в очередь",
+            message: task.version,
+            type: "info",
+        });
+        return;
+    }
+
+    executeDownloadTask(task);
+}
+
+async function cleanupCancelledInstall(version, installedVersionsSet, btn) {
+    try {
+        await eel.delete_versions_list(version)();
+    } catch (e) {}
+    try {
+        await eel.delete_version_record(version)();
+    } catch (e) {}
+    if (installedVersionsSet) {
+        installedVersionsSet.delete(version);
+    }
+    if (btn) {
+        btn.classList.remove("installed");
+        setDownloadButtonLabel(
+            btn,
+            '<i class="fas fa-download"></i> Скачать',
+            false,
+        );
+        const cover = btn
+            .closest(".version-card")
+            ?.querySelector(".version-card-cover");
+        const badge = cover?.querySelector(".version-installed-badge");
+        if (badge) badge.remove();
+    }
+}
+
 // ---------- Alerts ----------
 function showAlert() {
     document.getElementById("customAlert").style.display = "flex";
@@ -595,10 +710,41 @@ function isValidServerAddress(value) {
     );
 }
 
+const SERVER_STATUS_CACHE_TTL_MS = 30_000;
+const serverStatusCache = new Map();
+
+function normalizeServerIp(ip) {
+    return String(ip || "")
+        .trim()
+        .toLowerCase();
+}
+
+async function getServerInfoCached(ip, forceRefresh = false) {
+    const key = normalizeServerIp(ip);
+    if (!key) return null;
+
+    const now = Date.now();
+    const cached = serverStatusCache.get(key);
+    if (
+        !forceRefresh &&
+        cached &&
+        now - cached.ts < SERVER_STATUS_CACHE_TTL_MS
+    ) {
+        return cached.data;
+    }
+
+    const serverData = await eel.check_server_info(key)();
+    if (serverData) {
+        serverStatusCache.set(key, { ts: now, data: serverData });
+    }
+    return serverData;
+}
+
 // ---------- Server card ----------
 function createServerCard(serverData, onDelete) {
     const serverCard = document.createElement("div");
     serverCard.classList.add("server-card");
+    serverCard.dataset.ip = normalizeServerIp(serverData.ip);
 
     let image = null;
     if (
@@ -710,10 +856,13 @@ async function updateVersionSelect() {
         [logindata, versiondata] = accountVersionData;
     }
 
-    versionsFromDb.forEach((version) => {
-        const option = new Option(`${version[1]}`, version[1]);
+    const uniqueVersions = Array.from(
+        new Set((versionsFromDb || []).map((version) => version[1])),
+    );
+    uniqueVersions.forEach((versionValue) => {
+        const option = new Option(`${versionValue}`, versionValue);
         versionSelect.add(option);
-        if (version[1] == versiondata) {
+        if (versionValue == versiondata) {
             const ss = document.querySelector(".server-select");
             versionSelect.value = versiondata;
             if (versiondata === "LunarПВП 1.8.9") {
@@ -838,16 +987,33 @@ document
 
         if (ip && isValidServerAddress(ip)) {
             try {
-                const serverData = await eel.check_server_info(ip)();
+                const serverData = await getServerInfoCached(ip, true);
                 if (serverData) {
                     const serverList = document.getElementById("server-list");
+                    const normalizedIp = normalizeServerIp(serverData.ip);
+                    const existsCard = serverList.querySelector(
+                        `.server-card[data-ip="${normalizedIp}"]`,
+                    );
+                    if (existsCard) {
+                        toast({
+                            title: "Сервер уже добавлен",
+                            message: serverData.ip,
+                            type: "info",
+                        });
+                        ipInput.value = "";
+                        await updateServerSelect();
+                        return;
+                    }
                     const serverCard = createServerCard(
                         serverData,
                         async function () {
                             try {
                                 await eel.delete_server_by_ip(serverData.ip)();
+                                serverStatusCache.delete(
+                                    normalizeServerIp(serverData.ip),
+                                );
                                 serverList.removeChild(serverCard);
-                                updateServerSelect();
+                                await updateServerSelect();
                                 updateStats();
                                 toast({ title: "Сервер удалён", type: "info" });
                             } catch (error) {}
@@ -855,7 +1021,7 @@ document
                     );
                     serverList.appendChild(serverCard);
                     ipInput.value = "";
-                    updateServerSelect();
+                    await updateServerSelect();
                     updateStats();
                     toast({
                         title: "Сервер добавлен",
@@ -875,28 +1041,36 @@ document
 
 async function getIpAddress() {
     try {
-        const serverIps = await eel.get_ip_address()();
+        const serverIpsRaw = await eel.get_ip_address()();
+        const serverIps = Array.from(
+            new Set((serverIpsRaw || []).map((ip) => normalizeServerIp(ip))),
+        ).filter(Boolean);
         const serverList = document.getElementById("server-list");
         serverList.innerHTML = "";
 
-        for (const ip of serverIps) {
-            const serverData = await eel.check_server_info(ip)();
+        const serverListData = await Promise.all(
+            serverIps.map((ip) => getServerInfoCached(ip)),
+        );
+        for (const serverData of serverListData) {
             if (serverData) {
                 const serverCard = createServerCard(
                     serverData,
                     async function () {
                         try {
                             await eel.delete_server_by_ip(serverData.ip)();
+                            serverStatusCache.delete(
+                                normalizeServerIp(serverData.ip),
+                            );
                             serverList.removeChild(serverCard);
-                            updateServerSelect();
+                            await updateServerSelect();
                             updateStats();
                         } catch (error) {}
                     },
                 );
                 serverList.appendChild(serverCard);
-                updateServerSelect();
             }
         }
+        await updateServerSelect();
 
         if (serverIps.length === 0) {
             serverList.innerHTML = `
@@ -920,11 +1094,15 @@ async function updateServerSelect() {
     try {
         serverIps = await eel.get_ip_address()();
     } catch (e) {}
+    const uniqueIps = Array.from(
+        new Set((serverIps || []).map((ip) => normalizeServerIp(ip))),
+    ).filter(Boolean);
 
-    if (serverIps.length === 0) {
+    if (uniqueIps.length === 0) {
         ss.style.display = "none";
     } else {
-        serverIps.forEach((ip) => ss.add(new Option(ip, ip)));
+        ss.style.display = "";
+        uniqueIps.forEach((ip) => ss.add(new Option(ip, ip)));
     }
 }
 
@@ -1130,15 +1308,18 @@ async function updateVersionGrid() {
     );
 
     let onlineVersions = { releases: [], forge: [], fabric: [] };
+    let manifestBuilds = [];
     try {
         onlineVersions =
             (await eel.get_online_minecraft_versions(120)()) || onlineVersions;
     } catch (e) {}
+    try {
+        manifestBuilds = await getManifestBuilds();
+    } catch (e) {}
 
     const versions = onlineVersions.releases || [];
     const versions_build = [
-        "LunarПВП 1.8.9",
-        "ПВП 1.8.9",
+        ...manifestBuilds,
         ...(onlineVersions.forge || []),
         ...(onlineVersions.fabric || []),
     ];
@@ -1160,16 +1341,90 @@ async function updateVersionGrid() {
             isInstalled: installedVersionsSet.has(version),
             type: null,
             onDownload: async (btn) => {
-                if (isDownloading) return;
-                isDownloading = true;
-                circularProgress.classList.add("active");
-                toggleDownloadButtons(true);
-                playBtn.disabled = true;
-                playBtn.innerHTML =
-                    '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
-                btn.innerHTML =
-                    '<i class="fas fa-spinner fa-spin"></i> Загрузка';
-                btn.disabled = true;
+                const task = {
+                    key: getDownloadTaskKey(version, false),
+                    version,
+                    button: btn,
+                    run: async (state) => {
+                        circularProgress.classList.add("active");
+                        toggleDownloadButtons(true);
+                        playBtn.disabled = true;
+                        playBtn.innerHTML =
+                            '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+                        btn.innerHTML = '<i class="fas fa-ban"></i> Отменить';
+                        btn.disabled = false;
+                        try {
+                            startLauncherLogsStreaming(false);
+                            await eel.minecraft_download_version(version)();
+                            if (state.cancelRequested) {
+                                await cleanupCancelledInstall(
+                                    version,
+                                    installedVersionsSet,
+                                    btn,
+                                );
+                                toast({
+                                    title: "Загрузка отменена",
+                                    message: `Minecraft ${version}`,
+                                    type: "info",
+                                });
+                                return;
+                            }
+                            installedVersionsSet.add(version);
+                            try {
+                                await eel.insert_version(version)();
+                            } catch (e) {}
+                            updateVersionSelect();
+
+                            btn.innerHTML =
+                                '<i class="fas fa-check"></i> Установлено';
+                            btn.classList.add("installed");
+                            btn.disabled = true;
+                            const cover = btn
+                                .closest(".version-card")
+                                .querySelector(".version-card-cover");
+                            if (
+                                cover &&
+                                !cover.querySelector(".version-installed-badge")
+                            ) {
+                                const b = document.createElement("span");
+                                b.className = "version-installed-badge";
+                                b.innerHTML =
+                                    '<i class="fas fa-check"></i> Установлено';
+                                cover.appendChild(b);
+                            }
+                            toast({
+                                title: "Загружено",
+                                message: `Minecraft ${version}`,
+                                type: "success",
+                            });
+                        } catch (error) {
+                            if (state.cancelRequested) {
+                                await cleanupCancelledInstall(
+                                    version,
+                                    installedVersionsSet,
+                                    btn,
+                                );
+                            }
+                            setDownloadButtonLabel(
+                                btn,
+                                '<i class="fas fa-download"></i> Скачать',
+                                false,
+                            );
+                            showAlertVersion();
+                        } finally {
+                            circularProgress.classList.remove("active");
+                            toggleDownloadButtons(false);
+                            playBtn.innerHTML =
+                                '<i class="fas fa-play"></i> Играть';
+                            playBtn.disabled = !versionSelect.value;
+                            await updateVersionSelect();
+                            await updateVersionList();
+                            await updateVersionFolderList();
+                            updateStats();
+                        }
+                    },
+                };
+                enqueueDownloadTask(task);
 
                 try {
                     startLauncherLogsStreaming(false);
@@ -1228,16 +1483,92 @@ async function updateVersionGrid() {
             isInstalled: installedVersionsSet.has(version),
             type,
             onDownload: async (btn) => {
-                if (isDownloading) return;
-                isDownloading = true;
-                circularProgress.classList.add("active");
-                toggleDownloadButtons(true);
-                playBtn.disabled = true;
-                playBtn.innerHTML =
-                    '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
-                btn.innerHTML =
-                    '<i class="fas fa-spinner fa-spin"></i> Загрузка';
-                btn.disabled = true;
+                const task = {
+                    key: getDownloadTaskKey(version, true),
+                    version,
+                    button: btn,
+                    run: async (state) => {
+                        circularProgress.classList.add("active");
+                        toggleDownloadButtons(true);
+                        playBtn.disabled = true;
+                        playBtn.innerHTML =
+                            '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+                        btn.innerHTML = '<i class="fas fa-ban"></i> Отменить';
+                        btn.disabled = false;
+                        try {
+                            startLauncherLogsStreaming(false);
+                            await eel.minecraft_download_version_build(
+                                version,
+                            )();
+                            if (state.cancelRequested) {
+                                await cleanupCancelledInstall(
+                                    version,
+                                    installedVersionsSet,
+                                    btn,
+                                );
+                                toast({
+                                    title: "Загрузка отменена",
+                                    message: version,
+                                    type: "info",
+                                });
+                                return;
+                            }
+                            installedVersionsSet.add(version);
+                            try {
+                                await eel.insert_version(version)();
+                            } catch (e) {}
+                            updateVersionSelect();
+
+                            btn.innerHTML =
+                                '<i class="fas fa-check"></i> Установлено';
+                            btn.classList.add("installed");
+                            btn.disabled = true;
+                            const cover = btn
+                                .closest(".version-card")
+                                .querySelector(".version-card-cover");
+                            if (
+                                cover &&
+                                !cover.querySelector(".version-installed-badge")
+                            ) {
+                                const b = document.createElement("span");
+                                b.className = "version-installed-badge";
+                                b.innerHTML =
+                                    '<i class="fas fa-check"></i> Установлено';
+                                cover.appendChild(b);
+                            }
+                            toast({
+                                title: "Загружено",
+                                message: version,
+                                type: "success",
+                            });
+                        } catch (error) {
+                            if (state.cancelRequested) {
+                                await cleanupCancelledInstall(
+                                    version,
+                                    installedVersionsSet,
+                                    btn,
+                                );
+                            }
+                            setDownloadButtonLabel(
+                                btn,
+                                '<i class="fas fa-download"></i> Скачать',
+                                false,
+                            );
+                            showAlertVersion();
+                        } finally {
+                            circularProgress.classList.remove("active");
+                            toggleDownloadButtons(false);
+                            playBtn.innerHTML =
+                                '<i class="fas fa-play"></i> Играть';
+                            playBtn.disabled = !versionSelect.value;
+                            await updateVersionSelect();
+                            await updateVersionList();
+                            await updateVersionFolderList();
+                            updateStats();
+                        }
+                    },
+                };
+                enqueueDownloadTask(task);
 
                 try {
                     startLauncherLogsStreaming(false);
@@ -1385,6 +1716,9 @@ async function updateStats() {
 const UPDATES_FEED_REMOTE_URL =
     "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/updates.json";
 const UPDATES_FEED_LOCAL_FALLBACK_URL = "data/updates.json";
+const MODPACKS_MANIFEST_REMOTE_URL =
+    "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/modpacks_manifest.json";
+const MODPACKS_MANIFEST_LOCAL_URL = "data/modpacks_manifest.json";
 
 function parseRuDate(value) {
     const [day, month, year] = String(value || "")
@@ -1429,11 +1763,56 @@ async function getUpdatesFeed() {
     }
 }
 
+async function getManifestBuilds() {
+    const parseManifest = (payload) => {
+        const entries = Array.isArray(payload?.builds) ? payload.builds : [];
+        return entries
+            .map((item) => String(item?.name || "").trim())
+            .filter(Boolean);
+    };
+
+    try {
+        const response = await fetch(MODPACKS_MANIFEST_REMOTE_URL, {
+            cache: "no-cache",
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const json = await response.json();
+        return parseManifest(json);
+    } catch (error) {
+        console.warn(
+            "[StoneLauncher] Не удалось загрузить манифест сборок из GitHub.",
+            error,
+        );
+    }
+
+    try {
+        const response = await fetch(MODPACKS_MANIFEST_LOCAL_URL, {
+            cache: "no-cache",
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const json = await response.json();
+        return parseManifest(json);
+    } catch (error) {
+        console.warn(
+            "[StoneLauncher] Не удалось загрузить локальный манифест сборок.",
+            error,
+        );
+        return [];
+    }
+}
+
 async function renderUpdatesFeed() {
     const list = document.getElementById("updates-list");
     if (!list) return;
 
     const updates = await getUpdatesFeed();
+    const versionLabel = document.getElementById("launcher-version-label");
+    if (versionLabel && updates.length > 0) {
+        const latestVersion = String(updates[0].version || "").trim();
+        if (latestVersion) {
+            versionLabel.textContent = latestVersion;
+        }
+    }
     if (updates.length === 0) {
         list.innerHTML = `
             <div class="update-card">
