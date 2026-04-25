@@ -1382,106 +1382,74 @@ async function updateStats() {
 }
 
 // ---------- News / Updates feed ----------
-function renderUpdatesFeed() {
+const UPDATES_FEED_REMOTE_URL =
+    "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/updates.json";
+const UPDATES_FEED_LOCAL_FALLBACK_URL = "data/updates.json";
+
+function parseRuDate(value) {
+    const [day, month, year] = String(value || "")
+        .split(".")
+        .map((n) => Number.parseInt(n, 10));
+    if (!day || !month || !year) return 0;
+    return new Date(year, month - 1, day).getTime();
+}
+
+async function fetchUpdatesFeed(url) {
+    const response = await fetch(url, {
+        cache: "no-cache",
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const updates = await response.json();
+    if (!Array.isArray(updates)) {
+        throw new Error("updates.json должен быть массивом");
+    }
+    return updates
+        .filter((item) => item && item.version && item.title)
+        .sort((a, b) => parseRuDate(b.date) - parseRuDate(a.date));
+}
+
+async function getUpdatesFeed() {
+    try {
+        return await fetchUpdatesFeed(UPDATES_FEED_REMOTE_URL);
+    } catch (error) {
+        console.warn(
+            "[StoneLauncher] Не удалось загрузить updates.json из GitHub. Используется локальный fallback.",
+            error,
+        );
+    }
+
+    try {
+        return await fetchUpdatesFeed(UPDATES_FEED_LOCAL_FALLBACK_URL);
+    } catch (error) {
+        console.warn(
+            "[StoneLauncher] Не удалось загрузить локальный updates.json.",
+            error,
+        );
+        return [];
+    }
+}
+
+async function renderUpdatesFeed() {
     const list = document.getElementById("updates-list");
     if (!list) return;
-    const updates = [
-        {
-            version: "v1.8.5",
-            date: "25.04.2026",
-            title: "Fix сборки LunarПВП 1.8.9",
-            featured: true,
-            latest: true,
-            changes: [
-                "Исправил сборку LunarПВП 1.8.9. Теперь можно заходить на сервера используя крякнутую версию Lunar",
-                "Убрал сборку Техномагия 1.12.2",
-                "Пофиксил запуск приоритета загрузки Лаунчера. Запускается через edge браузер",
-            ],
-            download: true,
-        },
-        {
-            version: "v1.8",
-            date: "20.04.2026",
-            title: "Полный редизайн интерфейса",
-            featured: true,
-            latest: true,
-            changes: [
-                "Новый современный дизайн с тёмной темой и оранжевым акцентом",
-                "Раздел «Обновления» с полной историей изменений",
-                "Поиск и фильтры по типу сборки (Forge, Fabric, Модпаки)",
-                "Тосты-уведомления вместо стандартных алертов",
-                "Статистика на главной: установлено версий, аккаунтов, серверов",
-                "Кнопка копирования IP-адреса сервера",
-            ],
-            download: true,
-        },
-        {
-            version: "v1.7",
-            date: "19.04.2026",
-            title: "Стабильность и производительность",
-            changes: [
-                "Исправлена ошибка запуска для версий 1.20+",
-                "Ускорена загрузка модпаков за счёт параллельных потоков",
-                "Улучшена работа с G1GC аргументами",
-            ],
-        },
-        {
-            version: "v1.6.2",
-            date: "22.02.2026",
-            title: "Поддержка Fabric 1.20.4",
-            changes: [
-                "Добавлена поддержка последних сборок Fabric",
-                "Обновлён список релизных версий Minecraft",
-                "Исправлено отображение времени игры",
-            ],
-        },
-        {
-            version: "v1.6",
-            date: "12.08.2025",
-            title: "Менеджер серверов",
-            changes: [
-                "Добавлен раздел «Сервера» с проверкой статуса",
-                "Возможность сохранять любимые сервера",
-                "Просмотр количества онлайн-игроков",
-            ],
-        },
-        {
-            version: "v1.5.12",
-            date: "11.08.2025",
-            title: "Маленькие исправления",
-            changes: [],
-        },
-        {
-            version: "v1.5.4",
-            date: "10.07.2025",
-            title: "Исправлен запуск пвп сборки",
-            changes: [],
-        },
-        {
-            version: "v1.5.2",
-            date: "09.07.2025",
-            title: "Добавлены Forge и Optifine сборки и вводятся готовые сборки",
-            changes: ["Добавляется готовая сборка ПВП 1.8.9"],
-        },
-        {
-            version: "v1.4.9",
-            date: "22.03.2025",
-            title: "Стабильная версия лаунчера для игры по ваниле",
-            changes: [],
-        },
-        {
-            version: "v1.3",
-            date: "24.02.2025",
-            title: "Крупные исправления багов",
-            changes: [],
-        },
-        {
-            version: "v1.0",
-            date: "21.02.2025",
-            title: "Первый релиз лаунчера",
-            changes: [],
-        },
-    ];
+
+    const updates = await getUpdatesFeed();
+    if (updates.length === 0) {
+        list.innerHTML = `
+            <div class="update-card">
+                <div class="update-body">
+                    <div class="update-header">
+                        <span class="update-title">Лента обновлений временно недоступна</span>
+                    </div>
+                    <ul class="update-changelog">
+                        <li>Не удалось получить updates.json с GitHub.</li>
+                        <li>Проверьте подключение к интернету и повторите позже.</li>
+                    </ul>
+                </div>
+            </div>
+        `;
+        return;
+    }
 
     list.innerHTML = updates
         .map(
@@ -1578,7 +1546,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         ]);
 
         updatePlaytimeOnPage();
-        renderUpdatesFeed();
+        await renderUpdatesFeed();
     } finally {
         clearTimeout(startupSafetyTimeout);
         hideStartupLoader();
