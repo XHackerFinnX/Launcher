@@ -16,7 +16,8 @@ from db.data import (
     update_account_version, get_account_version, update_setting_memory,
     update_setting_checkbox, update_setting_bit_checkbox, update_setting_optimiz_checkbox,
     update_setting_argument, update_setting_open_log_viewer_checkbox, get_settings, delete_versions_list, check_server_info,
-    get_ip_address, delete_server_by_ip, sum_time, check_version_launcher
+    get_ip_address, delete_server_by_ip, sum_time, check_version_launcher, update_theme_settings,
+    search_mods, install_mod, list_installed_mods
 )
 
 def main():

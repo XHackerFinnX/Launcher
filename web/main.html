@@ -232,6 +232,12 @@
                             </p>
                         </div>
                         <div class="page-actions">
+                            <button
+                                class="btn-primary"
+                                id="open-modpack-creator"
+                            >
+                                <i class="fas fa-plus"></i> Создать сборку
+                            </button>
                             <div class="search-wrapper">
                                 <i class="fas fa-search"></i>
                                 <input
@@ -418,7 +424,24 @@
                         </div>
                     </div>
 
-                    <div class="settings-container">
+                    <div class="settings-tabs" id="settings-tabs">
+                        <button
+                            class="settings-tab active"
+                            data-tab="performance"
+                        >
+                            Производительность
+                        </button>
+                        <button class="settings-tab" data-tab="launcher">
+                            Лаунчер
+                        </button>
+                        <button class="settings-tab" data-tab="customization">
+                            Кастомизация
+                        </button>
+                    </div>
+                    <div
+                        class="settings-container"
+                        data-settings-pane="performance"
+                    >
                         <div class="settings-item">
                             <h3 class="settings-subheader">
                                 <span class="settings-subheader-icon"
@@ -484,6 +507,102 @@
                             </div>
                         </div>
 
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fas fa-microchip"></i
+                                ></span>
+                                64-битная версия Java
+                            </h3>
+                            <div class="bit-version-toggle toggle-row">
+                                <span class="toggle-text"
+                                    >Использовать 64-битную Java. Не работает
+                                    для версий 1.17 и выше.</span
+                                >
+                                <label class="switch">
+                                    <input
+                                        type="checkbox"
+                                        id="bit-version-toggle"
+                                    />
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fas fa-gauge-high"></i
+                                ></span>
+                                Оптимизация игры
+                            </h3>
+                            <div class="optimiz-toggle toggle-row">
+                                <span class="toggle-text"
+                                    >Экспериментальная настройка для увеличения
+                                    FPS. Не работает для версий 1.17 и
+                                    выше.</span
+                                >
+                                <label class="switch">
+                                    <input
+                                        type="checkbox"
+                                        id="optimiz-toggle"
+                                    />
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="settings-item">
+                            <h3 class="settings-subheader">
+                                <span class="settings-subheader-icon"
+                                    ><i class="fab fa-java"></i
+                                ></span>
+                                Java аргументы
+                            </h3>
+                            <h4 class="settings-subheader-h4">
+                                Дополнительные параметры виртуальной машины Java
+                                для запуска игры.
+                            </h4>
+                            <div class="java-arguments">
+                                <div class="argument-toggle">
+                                    <h4>Тенелии аргументы</h4>
+                                    <label class="switch">
+                                        <input
+                                            type="checkbox"
+                                            id="tenelia-args-toggle"
+                                        />
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                                <div class="argument-toggle">
+                                    <h4>G1GC аргументы</h4>
+                                    <label class="switch">
+                                        <input
+                                            type="checkbox"
+                                            id="g1gc-args-toggle"
+                                        />
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                                <div class="custom-args">
+                                    <h4>
+                                        <label for="custom-args-input"
+                                            >Свои аргументы</label
+                                        >
+                                    </h4>
+                                    <input
+                                        type="text"
+                                        id="custom-args-input"
+                                        placeholder="-Xmx4G -XX:+UseG1GC …"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div
+                        class="settings-container hidden"
+                        data-settings-pane="launcher"
+                    >
                         <div class="settings-item">
                             <h3 class="settings-subheader">
                                 <span class="settings-subheader-icon"
@@ -641,99 +760,71 @@
                                 class="integrity-message"
                             ></p>
                         </div>
-
+                    </div>
+                    <div
+                        class="settings-container hidden"
+                        data-settings-pane="customization"
+                    >
                         <div class="settings-item">
                             <h3 class="settings-subheader">
                                 <span class="settings-subheader-icon"
-                                    ><i class="fas fa-microchip"></i
-                                ></span>
-                                64-битная версия Java
+                                    ><i class="fas fa-palette"></i></span
+                                >Кастомизация
                             </h3>
-                            <div class="bit-version-toggle toggle-row">
-                                <span class="toggle-text"
-                                    >Использовать 64-битную Java. Не работает
-                                    для версий 1.17 и выше.</span
-                                >
-                                <label class="switch">
+                            <div class="theme-grid">
+                                <label
+                                    >Фон
                                     <input
-                                        type="checkbox"
-                                        id="bit-version-toggle"
-                                    />
-                                    <span class="slider round"></span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="settings-item">
-                            <h3 class="settings-subheader">
-                                <span class="settings-subheader-icon"
-                                    ><i class="fas fa-gauge-high"></i
-                                ></span>
-                                Оптимизация игры
-                            </h3>
-                            <div class="optimiz-toggle toggle-row">
-                                <span class="toggle-text"
-                                    >Экспериментальная настройка для увеличения
-                                    FPS. Не работает для версий 1.17 и
-                                    выше.</span
-                                >
-                                <label class="switch">
+                                        type="color"
+                                        id="theme-bg"
+                                        value="#0e1018"
+                                /></label>
+                                <label
+                                    >Панели
                                     <input
-                                        type="checkbox"
-                                        id="optimiz-toggle"
-                                    />
-                                    <span class="slider round"></span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="settings-item">
-                            <h3 class="settings-subheader">
-                                <span class="settings-subheader-icon"
-                                    ><i class="fab fa-java"></i
-                                ></span>
-                                Java аргументы
-                            </h3>
-                            <h4 class="settings-subheader-h4">
-                                Дополнительные параметры виртуальной машины Java
-                                для запуска игры.
-                            </h4>
-                            <div class="java-arguments">
-                                <div class="argument-toggle">
-                                    <h4>Тенелии аргументы</h4>
-                                    <label class="switch">
-                                        <input
-                                            type="checkbox"
-                                            id="tenelia-args-toggle"
-                                        />
-                                        <span class="slider round"></span>
-                                    </label>
-                                </div>
-                                <div class="argument-toggle">
-                                    <h4>G1GC аргументы</h4>
-                                    <label class="switch">
-                                        <input
-                                            type="checkbox"
-                                            id="g1gc-args-toggle"
-                                        />
-                                        <span class="slider round"></span>
-                                    </label>
-                                </div>
-                                <div class="custom-args">
-                                    <h4>
-                                        <label for="custom-args-input"
-                                            >Свои аргументы</label
-                                        >
-                                    </h4>
+                                        type="color"
+                                        id="theme-panel"
+                                        value="#161826"
+                                /></label>
+                                <label
+                                    >Текст
                                     <input
-                                        type="text"
-                                        id="custom-args-input"
-                                        placeholder="-Xmx4G -XX:+UseG1GC …"
-                                    />
-                                </div>
+                                        type="color"
+                                        id="theme-text"
+                                        value="#e6e8f0"
+                                /></label>
+                                <label
+                                    >Акцент
+                                    <input
+                                        type="color"
+                                        id="theme-accent"
+                                        value="#ffb86c"
+                                /></label>
+                                <label
+                                    >Акцент 2
+                                    <input
+                                        type="color"
+                                        id="theme-accent2"
+                                        value="#ff9a3c"
+                                /></label>
                             </div>
+                            <input
+                                type="text"
+                                id="theme-background-image"
+                                class="account-input"
+                                placeholder="URL фонового изображения (необязательно)"
+                            />
+                            <button class="btn-primary" id="save-theme-btn">
+                                <i class="fas fa-floppy-disk"></i> Сохранить
+                                тему
+                            </button>
                         </div>
                     </div>
+
+                    <div
+                        class="settings-container hidden"
+                        data-settings-pane="launcher"
+                    ></div>
                 </section>
             </main>
         </div>
@@ -875,6 +966,44 @@
                 <h2>Ошибка обновления</h2>
                 <p>Не удалось обновить лаунчер. Попробуйте позже.</p>
                 <button id="closeErrorModal">Закрыть</button>
+            </div>
+        </div>
+
+        <div class="modpack-modal hidden" id="modpack-modal">
+            <div class="modpack-card">
+                <button id="close-modpack-modal" class="btn-secondary">
+                    Закрыть
+                </button>
+                <h3>Создать сборку</h3>
+                <div class="modpack-top">
+                    <input
+                        id="modpack-version"
+                        class="search-input"
+                        placeholder="Версия (например 1.20.1)"
+                    />
+                    <select id="modpack-loader" class="version-deletion-select">
+                        <option value="forge">Forge</option>
+                        <option value="fabric">Fabric</option>
+                    </select>
+                    <button class="btn-primary" id="prepare-modpack">
+                        Установить базу
+                    </button>
+                </div>
+                <div class="mod-tabs">
+                    <button class="filter-tab active" data-provider="modrinth">
+                        Modrinth</button
+                    ><button class="filter-tab" data-provider="curseforge">
+                        CurseForge
+                    </button>
+                </div>
+                <input
+                    id="mod-search"
+                    class="search-input"
+                    placeholder="Поиск мода"
+                />
+                <div id="mods-results" class="updates-list"></div>
+                <h4>Установленные моды</h4>
+                <div id="installed-mods-list" class="updates-list"></div>
             </div>
         </div>
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import eel
 import requests
 import minecraft_launcher_lib
+from datetime import datetime
 
 from db.database import create_connection
 from utils.config import minecraft_directory, VERSIONS_LAUNCHER
@@ -143,10 +144,27 @@ def insert_setting(memory, checkbox, bit_checkbox, optimiz_checkbox, argument):
                    VALUES (?, ?, ?, ?, ?, ?)''', (memory, checkbox, bit_checkbox, optimiz_checkbox, argument, 1))
     conn.commit()
     conn.close()
-    
+
+def _ensure_settings_schema(cursor):
+    cursor.execute("PRAGMA table_info(settings)")
+    columns = {row[1] for row in cursor.fetchall()}
+    required_columns = {
+        "open_log_viewer_checkbox": "INTEGER DEFAULT 1",
+        "theme_bg": "TEXT",
+        "theme_panel": "TEXT",
+        "theme_text": "TEXT",
+        "theme_accent": "TEXT",
+        "theme_accent2": "TEXT",
+        "theme_background_image": "TEXT DEFAULT ''",
+    }
+    for column, column_type in required_columns.items():
+        if column not in columns:
+            cursor.execute(f"ALTER TABLE settings ADD COLUMN {column} {column_type}")
+
 def ensure_settings_row():
     conn = create_connection(db_path)
     cursor = conn.cursor()
+    _ensure_settings_schema(cursor)
     cursor.execute(
         '''
         INSERT INTO settings (
@@ -155,12 +173,18 @@ def ensure_settings_row():
             bit_checkbox,
             optimiz_checkbox,
             argument,
-            open_log_viewer_checkbox
+            open_log_viewer_checkbox,
+            theme_bg,
+            theme_panel,
+            theme_text,
+            theme_accent,
+            theme_accent2,
+            theme_background_image
         )
-        SELECT ?, ?, ?, ?, ?, ?
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE NOT EXISTS (SELECT 1 FROM settings)
         ''',
-        (2048, 0, 0, 0, "", 1)
+        (2048, 0, 0, 0, "", 1, "#0e1018", "#161826", "#e6e8f0", "#ffb86c", "#ff9a3c", "")
     )
     conn.commit()
     conn.close()
@@ -168,6 +192,7 @@ def ensure_settings_row():
 def _update_setting_field(field: str, value):
     conn = create_connection(db_path)
     cursor = conn.cursor()
+    _ensure_settings_schema(cursor)
     cursor.execute(
         '''
         INSERT INTO settings (
@@ -176,12 +201,18 @@ def _update_setting_field(field: str, value):
             bit_checkbox,
             optimiz_checkbox,
             argument,
-            open_log_viewer_checkbox
+            open_log_viewer_checkbox,
+            theme_bg,
+            theme_panel,
+            theme_text,
+            theme_accent,
+            theme_accent2,
+            theme_background_image
         )
-        SELECT ?, ?, ?, ?, ?, ?
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE NOT EXISTS (SELECT 1 FROM settings)
         ''',
-        (2048, 0, 0, 0, "", 1)
+        (2048, 0, 0, 0, "", 1, "#0e1018", "#161826", "#e6e8f0", "#ffb86c", "#ff9a3c", "")
     )
     cursor.execute(f"UPDATE settings SET {field} = ?", (value,))
     conn.commit()
@@ -217,13 +248,20 @@ def update_setting_open_log_viewer_checkbox(value):
 @eel.expose
 def get_settings():
     """Получение всех настроек из таблицы settings."""
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    _ensure_settings_schema(cursor)
+    conn.commit()
+    conn.close()
     ensure_settings_row()
+    
     conn = create_connection(db_path)
     cursor = conn.cursor()
     
     cursor.execute(
         '''
-        SELECT memory, checkbox, bit_checkbox, optimiz_checkbox, argument, open_log_viewer_checkbox
+        SELECT memory, checkbox, bit_checkbox, optimiz_checkbox, argument, open_log_viewer_checkbox,
+               theme_bg, theme_panel, theme_text, theme_accent, theme_accent2, theme_background_image
         FROM settings
         '''
     )
@@ -237,7 +275,13 @@ def get_settings():
             "bit_checkbox": setting[2],
             "optimiz_checkbox": setting[3],
             "argument": setting[4],
-            "open_log_viewer_checkbox": setting[5] if setting[5] is not None else 1
+            "open_log_viewer_checkbox": setting[5] if setting[5] is not None else 1,
+            "theme_bg": setting[6] or "#0e1018",
+            "theme_panel": setting[7] or "#161826",
+            "theme_text": setting[8] or "#e6e8f0",
+            "theme_accent": setting[9] or "#ffb86c",
+            "theme_accent2": setting[10] or "#ff9a3c",
+            "theme_background_image": setting[11] or ""
         }
     else:
         return {
@@ -246,7 +290,13 @@ def get_settings():
             "bit_checkbox": 0,
             "optimiz_checkbox": 0,
             "argument": "",
-            "open_log_viewer_checkbox": 1
+            "open_log_viewer_checkbox": 1,
+            "theme_bg": "#0e1018",
+            "theme_panel": "#161826",
+            "theme_text": "#e6e8f0",
+            "theme_accent": "#ffb86c",
+            "theme_accent2": "#ff9a3c",
+            "theme_background_image": ""
         }
     
 @eel.expose
@@ -698,3 +748,91 @@ def get_online_minecraft_versions(limit=120):
         "forge": forge_versions,
         "fabric": fabric_versions
     }
+
+@eel.expose
+def update_theme_settings(payload):
+    payload = payload or {}
+    allowed = {
+        "theme_bg": "#0e1018",
+        "theme_panel": "#161826",
+        "theme_text": "#e6e8f0",
+        "theme_accent": "#ffb86c",
+        "theme_accent2": "#ff9a3c",
+        "theme_background_image": "",
+    }
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM settings LIMIT 1")
+    if not cursor.fetchone():
+        ensure_settings_row()
+    for key, default in allowed.items():
+        value = payload.get(key, default)
+        cursor.execute(f"UPDATE settings SET {key} = ?", (value,))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def _mods_dir(version_name):
+    return Path(minecraft_directory) / version_name / "mods"
+
+@eel.expose
+def list_installed_mods(version_name):
+    mods_path = _mods_dir(version_name)
+    if not mods_path.exists():
+        return []
+    out=[]
+    for file in sorted(mods_path.glob("*.jar")):
+        out.append({"name": file.name, "size": file.stat().st_size})
+    return out
+
+@eel.expose
+def search_mods(provider, query, game_version, loader, limit=24, index='relevance'):
+    provider = (provider or 'modrinth').lower()
+    query = query or ''
+    game_version = game_version or ''
+    loader = loader or ''
+    limit = max(1, min(int(limit or 24), 50))
+    if provider == 'modrinth':
+        facets = []
+        if game_version:
+            facets.append(f'["versions:{game_version}"]')
+        if loader:
+            facets.append(f'["categories:{loader}"]')
+        facets_str = '[' + ','.join(facets) + ']'
+        url = "https://api.modrinth.com/v2/search"
+        params = {"query": query, "limit": limit, "index": index, "facets": facets_str}
+        r = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        hits = r.json().get('hits', [])
+        return [{"provider":"modrinth","project_id":h.get('project_id'),"title":h.get('title'),"description":h.get('description'),"icon":h.get('icon_url'),"downloads":h.get('downloads',0),"author":h.get('author')} for h in hits]
+    return []
+
+@eel.expose
+def install_mod(provider, project_id, version_name, game_version, loader):
+    mods_path = _mods_dir(version_name)
+    mods_path.mkdir(parents=True, exist_ok=True)
+    if provider != 'modrinth':
+        return {"ok": False, "error": "Provider not supported yet"}
+    url = f"https://api.modrinth.com/v2/project/{project_id}/version"
+    r = requests.get(url, timeout=REQUEST_TIMEOUT)
+    r.raise_for_status()
+    versions = r.json()
+    selected = None
+    for ver in versions:
+        if game_version and game_version not in ver.get('game_versions', []):
+            continue
+        if loader and loader not in ver.get('loaders', []):
+            continue
+        selected = ver
+        break
+    if not selected:
+        return {"ok": False, "error": "Не найдена подходящая версия мода"}
+    file_obj = next((f for f in selected.get('files', []) if f.get('primary')), None) or (selected.get('files') or [None])[0]
+    if not file_obj:
+        return {"ok": False, "error": "Файл мода отсутствует"}
+    file_url = file_obj.get('url')
+    filename = file_obj.get('filename')
+    target = mods_path / filename
+    _download_file_to_target(file_url, target)
+    return {"ok": True, "name": filename, "size": target.stat().st_size, "installed_at": datetime.utcnow().isoformat()}

@@ -102,6 +102,30 @@ def apply_migrations(conn):
             )
         cursor.execute("PRAGMA user_version = 2")
         conn.commit()
+        
+    if version < 3:
+        cursor.execute("PRAGMA table_info(settings)")
+        columns = {row[1] for row in cursor.fetchall()}
+        theme_columns = {
+            "theme_bg", "theme_panel", "theme_text", "theme_accent", "theme_accent2", "theme_background_image"
+        }
+        for column in theme_columns:
+            if column not in columns:
+                if column == "theme_background_image":
+                    cursor.execute(f"ALTER TABLE settings ADD COLUMN {column} TEXT DEFAULT ''")
+                else:
+                    cursor.execute(f"ALTER TABLE settings ADD COLUMN {column} TEXT")
+        cursor.execute(
+            "UPDATE settings SET "
+            "theme_bg = COALESCE(theme_bg, '#0e1018'), "
+            "theme_panel = COALESCE(theme_panel, '#161826'), "
+            "theme_text = COALESCE(theme_text, '#e6e8f0'), "
+            "theme_accent = COALESCE(theme_accent, '#ffb86c'), "
+            "theme_accent2 = COALESCE(theme_accent2, '#ff9a3c'), "
+            "theme_background_image = COALESCE(theme_background_image, '')"
+        )
+        cursor.execute("PRAGMA user_version = 3")
+        conn.commit()
 
 
 def init_database(db_file):

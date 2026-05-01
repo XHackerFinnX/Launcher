@@ -2099,3 +2099,190 @@ function send_process_status(status) {
 try {
     eel.expose(send_process_status);
 } catch (e) {}
+
+// ---------- Settings tabs + customization ----------
+document.addEventListener("DOMContentLoaded", async () => {
+    const tabs = document.querySelectorAll(".settings-tab");
+    const panes = document.querySelectorAll("[data-settings-pane]");
+    tabs.forEach((tab) =>
+        tab.addEventListener("click", () => {
+            tabs.forEach((t) => t.classList.remove("active"));
+            tab.classList.add("active");
+            const pane = tab.dataset.tab;
+            panes.forEach((p) =>
+                p.classList.toggle("hidden", p.dataset.settingsPane !== pane),
+            );
+        }),
+    );
+
+    let settings = {};
+    try {
+        settings = (await eel.get_settings()()) || {};
+    } catch (e) {}
+    const themeFields = ["bg", "panel", "text", "accent", "accent2"];
+    themeFields.forEach((key) => {
+        const el = document.getElementById(`theme-${key}`);
+        const val = settings[`theme_${key}`];
+        if (el && val) {
+            el.value = val;
+        }
+        if (el) el.addEventListener("input", () => applyThemePreview());
+    });
+    const bgImageInput = document.getElementById("theme-background-image");
+    if (bgImageInput)
+        bgImageInput.value = settings.theme_background_image || "";
+    function applyThemePreview() {
+        document.documentElement.style.setProperty(
+            "--bg",
+            document.getElementById("theme-bg")?.value || "#0e1018",
+        );
+        document.documentElement.style.setProperty(
+            "--panel",
+            document.getElementById("theme-panel")?.value || "#161826",
+        );
+        document.documentElement.style.setProperty(
+            "--text",
+            document.getElementById("theme-text")?.value || "#e6e8f0",
+        );
+        document.documentElement.style.setProperty(
+            "--accent",
+            document.getElementById("theme-accent")?.value || "#ffb86c",
+        );
+        document.documentElement.style.setProperty(
+            "--accent-2",
+            document.getElementById("theme-accent2")?.value || "#ff9a3c",
+        );
+        const bg = bgImageInput?.value?.trim();
+        if (bg) document.body.style.backgroundImage = `url('${bg}')`;
+    }
+    applyThemePreview();
+    const saveThemeBtn = document.getElementById("save-theme-btn");
+    saveThemeBtn?.addEventListener("click", async () => {
+        const payload = {
+            theme_bg: document.getElementById("theme-bg")?.value,
+            theme_panel: document.getElementById("theme-panel")?.value,
+            theme_text: document.getElementById("theme-text")?.value,
+            theme_accent: document.getElementById("theme-accent")?.value,
+            theme_accent2: document.getElementById("theme-accent2")?.value,
+            theme_background_image: bgImageInput?.value || "",
+        };
+        try {
+            await eel.update_theme_settings(payload)();
+            toast({ title: "Тема сохранена", type: "success" });
+        } catch (e) {
+            toast({ title: "Ошибка сохранения темы", type: "error" });
+        }
+    });
+});
+
+// ---------- Modpack creator ----------
+document.addEventListener("DOMContentLoaded", () => {
+    const modal = document.getElementById("modpack-modal");
+    const openBtn = document.getElementById("open-modpack-creator");
+    const closeBtn = document.getElementById("close-modpack-modal");
+    const prepareBtn = document.getElementById("prepare-modpack");
+    const results = document.getElementById("mods-results");
+    const search = document.getElementById("mod-search");
+    const installedList = document.getElementById("installed-mods-list");
+    let provider = "modrinth";
+    openBtn?.addEventListener("click", () => modal?.classList.remove("hidden"));
+    closeBtn?.addEventListener("click", () => modal?.classList.add("hidden"));
+    document.querySelectorAll("[data-provider]").forEach((b) =>
+        b.addEventListener("click", () => {
+            provider = b.dataset.provider;
+            document
+                .querySelectorAll("[data-provider]")
+                .forEach((x) => x.classList.remove("active"));
+            b.classList.add("active");
+            loadMods();
+        }),
+    );
+
+    async function loadInstalled() {
+        const version = document
+            .getElementById("modpack-version")
+            ?.value?.trim();
+        if (!version) return;
+        try {
+            const list = await eel.list_installed_mods(version)();
+            installedList.innerHTML =
+                list
+                    .map(
+                        (m) =>
+                            `<div class="update-item"><b>${m.name}</b> <span>${(m.size / 1024 / 1024).toFixed(2)} MB</span></div>`,
+                    )
+                    .join("") || '<div class="update-item">Пока пусто</div>';
+        } catch (e) {}
+    }
+
+    async function loadMods() {
+        const version = document
+            .getElementById("modpack-version")
+            ?.value?.trim();
+        const loader = document.getElementById("modpack-loader")?.value;
+        if (!version || !loader) return;
+        results.innerHTML = '<div class="update-item">Загрузка...</div>';
+        try {
+            const mods = await eel.search_mods(
+                provider,
+                search.value,
+                version,
+                loader,
+                20,
+                "downloads",
+            )();
+            results.innerHTML =
+                mods
+                    .map(
+                        (m) =>
+                            `<div class="update-item"><img src="${m.icon || ""}" style="width:36px;height:36px;border-radius:8px;object-fit:cover;margin-right:8px;"/><div><b>${m.title}</b><div>${m.description || ""}</div></div><button class="btn-secondary install-mod-btn" data-id="${m.project_id}">Установить</button></div>`,
+                    )
+                    .join("") ||
+                '<div class="update-item">Ничего не найдено</div>';
+            results.querySelectorAll(".install-mod-btn").forEach((btn) =>
+                btn.addEventListener("click", async () => {
+                    btn.textContent = "Скачивание...";
+                    const res = await eel.install_mod(
+                        provider,
+                        btn.dataset.id,
+                        version,
+                        version,
+                        loader,
+                    )();
+                    btn.textContent = res.ok ? "Установлено" : "Ошибка";
+                    await loadInstalled();
+                }),
+            );
+        } catch (e) {
+            results.innerHTML =
+                '<div class="update-item">Ошибка загрузки каталога модов</div>';
+        }
+    }
+    prepareBtn?.addEventListener("click", async () => {
+        const version = document
+            .getElementById("modpack-version")
+            ?.value?.trim();
+        const loader = document.getElementById("modpack-loader")?.value;
+        if (!version) return;
+        const build = `${version}-${loader}`;
+        prepareBtn.innerHTML =
+            '<i class="fas fa-spinner fa-spin"></i> Установка...';
+        try {
+            await eel.minecraft_download_version_build(build)();
+            toast({
+                title: "Базовая сборка установлена",
+                message: build,
+                type: "success",
+            });
+            await loadMods();
+            await loadInstalled();
+        } catch (e) {
+            toast({
+                title: "Не удалось установить базовую сборку",
+                type: "error",
+            });
+        }
+        prepareBtn.innerHTML = "Установить базу";
+    });
+    search?.addEventListener("input", () => loadMods());
+});

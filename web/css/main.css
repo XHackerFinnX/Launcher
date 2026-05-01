@@ -2453,3 +2453,75 @@ html {
         grid-template-columns: repeat(3, 1fr);
     }
 }
+
+.hidden {
+    display: none !important;
+}
+.settings-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.settings-tab {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    border-radius: 10px;
+    color: var(--text-muted);
+}
+.settings-tab.active {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+.theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin: 10px 0;
+}
+.theme-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--text-muted);
+}
+.theme-grid input[type="color"] {
+    width: 100%;
+    height: 42px;
+    border: none;
+    background: transparent;
+}
+.modpack-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3000;
+}
+.modpack-card {
+    width: min(980px, 95vw);
+    max-height: 90vh;
+    overflow: auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+}
+.modpack-top {
+    display: grid;
+    grid-template-columns: 1fr 180px 180px;
+    gap: 10px;
+    margin: 10px 0;
+}
+.update-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+}
