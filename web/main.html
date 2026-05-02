@@ -808,16 +808,32 @@
                                         value="#ff9a3c"
                                 /></label>
                             </div>
+                            <div
+                                class="theme-grid"
+                                id="theme-advanced-grid"
+                            ></div>
+                            <input
+                                type="text"
+                                id="theme-name"
+                                class="account-input"
+                                placeholder="Название темы"
+                                style="margin-bottom: 10px;"
+                            />
                             <input
                                 type="text"
                                 id="theme-background-image"
                                 class="account-input"
                                 placeholder="URL фонового изображения (необязательно)"
+                                style="margin-bottom: 10px;"
                             />
                             <button class="btn-primary" id="save-theme-btn">
                                 <i class="fas fa-floppy-disk"></i> Сохранить
                                 тему
                             </button>
+                            <div class="saved-themes">
+                                <h4>Сохраненные темы</h4>
+                                <div id="saved-themes-list"></div>
+                            </div>
                         </div>
                     </div>
 

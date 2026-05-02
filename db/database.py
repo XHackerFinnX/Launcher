@@ -70,6 +70,24 @@ def create_table_versions_launcher(conn):
     except sqlite3.Error as e:
         print(f"Ошибка при создании таблицы launcher: {e}")
 
+def create_table_themes(conn):
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            '''CREATE TABLE IF NOT EXISTS themes (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            name TEXT NOT NULL UNIQUE,
+                            theme_bg TEXT NOT NULL,
+                            theme_panel TEXT NOT NULL,
+                            theme_text TEXT NOT NULL,
+                            theme_accent TEXT NOT NULL,
+                            theme_accent2 TEXT NOT NULL,
+                            theme_background_image TEXT DEFAULT '',
+                            theme_json TEXT DEFAULT '{}')'''
+        )
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"Ошибка при создании таблицы themes: {e}")
 
 def apply_migrations(conn):
     cursor = conn.cursor()
@@ -126,6 +144,14 @@ def apply_migrations(conn):
         )
         cursor.execute("PRAGMA user_version = 3")
         conn.commit()
+        
+    if version < 4:
+        cursor.execute("PRAGMA table_info(themes)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "theme_json" not in columns:
+            cursor.execute("ALTER TABLE themes ADD COLUMN theme_json TEXT DEFAULT '{}'")
+        cursor.execute("PRAGMA user_version = 4")
+        conn.commit()
 
 
 def init_database(db_file):
@@ -136,5 +162,6 @@ def init_database(db_file):
     create_table_server(conn)
     create_table_time(conn)
     create_table_versions_launcher(conn)
+    create_table_themes(conn)
     apply_migrations(conn)
     conn.close()

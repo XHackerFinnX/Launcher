@@ -2129,6 +2129,122 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (el) el.addEventListener("input", () => applyThemePreview());
     });
     const bgImageInput = document.getElementById("theme-background-image");
+    const themeNameInput = document.getElementById("theme-name");
+    const savedThemesList = document.getElementById("saved-themes-list");
+    const defaultTheme = {
+        theme_bg: "#0e1018",
+        theme_panel: "#161826",
+        theme_text: "#e6e8f0",
+        theme_accent: "#ffb86c",
+        theme_accent2: "#ff9a3c",
+        theme_background_image: "",
+    };
+    const advancedThemeFields = [
+        { key: "bg_2", label: "Фон 2", cssVar: "--bg-2", default: "#11131e" },
+        {
+            key: "panel_2",
+            label: "Панели 2",
+            cssVar: "--panel-2",
+            default: "#1c1f30",
+        },
+        {
+            key: "panel_hover",
+            label: "Hover панелей",
+            cssVar: "--panel-hover",
+            default: "#232740",
+        },
+        {
+            key: "text_muted",
+            label: "Текст muted",
+            cssVar: "--text-muted",
+            default: "#8b90a8",
+        },
+        {
+            key: "text_dim",
+            label: "Текст dim",
+            cssVar: "--text-dim",
+            default: "#5a607a",
+        },
+        { key: "info", label: "Info", cssVar: "--info", default: "#4fc3f7" },
+        {
+            key: "success",
+            label: "Success",
+            cssVar: "--success",
+            default: "#4ade80",
+        },
+        {
+            key: "danger",
+            label: "Danger",
+            cssVar: "--danger",
+            default: "#f87171",
+        },
+    ];
+    const advancedGrid = document.getElementById("theme-advanced-grid");
+    if (advancedGrid) {
+        advancedGrid.innerHTML = advancedThemeFields
+            .map(
+                (f) =>
+                    `<label>${f.label}<input type="color" id="theme-${f.key.replaceAll("_", "-")}" value="${f.default}" /></label>`,
+            )
+            .join("");
+    }
+    let savedThemes = [];
+
+    async function loadSavedThemes() {
+        try {
+            savedThemes = (await eel.get_saved_themes()()) || [];
+            if (!Array.isArray(savedThemes)) savedThemes = [];
+        } catch (e) {
+            savedThemes = [];
+        }
+    }
+
+    function getCurrentThemePayload() {
+        const themeJson = {};
+        advancedThemeFields.forEach((f) => {
+            themeJson[f.key] =
+                document.getElementById(`theme-${f.key.replaceAll("_", "-")}`)
+                    ?.value || f.default;
+        });
+        return {
+            theme_bg: document.getElementById("theme-bg")?.value || "#0e1018",
+            theme_panel:
+                document.getElementById("theme-panel")?.value || "#161826",
+            theme_text:
+                document.getElementById("theme-text")?.value || "#e6e8f0",
+            theme_accent:
+                document.getElementById("theme-accent")?.value || "#ffb86c",
+            theme_accent2:
+                document.getElementById("theme-accent2")?.value || "#ff9a3c",
+            theme_background_image: bgImageInput?.value?.trim() || "",
+            theme_json: themeJson,
+        };
+    }
+
+    function fillThemeInputs(theme) {
+        document.getElementById("theme-bg").value = theme.theme_bg || "#0e1018";
+        document.getElementById("theme-panel").value =
+            theme.theme_panel || "#161826";
+        document.getElementById("theme-text").value =
+            theme.theme_text || "#e6e8f0";
+        document.getElementById("theme-accent").value =
+            theme.theme_accent || "#ffb86c";
+        document.getElementById("theme-accent2").value =
+            theme.theme_accent2 || "#ff9a3c";
+        if (bgImageInput)
+            bgImageInput.value = theme.theme_background_image || "";
+        let themeJson = {};
+        try {
+            themeJson = JSON.parse(theme.theme_json || "{}");
+        } catch (e) {}
+        advancedThemeFields.forEach((f) => {
+            const el = document.getElementById(
+                `theme-${f.key.replaceAll("_", "-")}`,
+            );
+            if (el) el.value = themeJson[f.key] || f.default;
+        });
+    }
+
     if (bgImageInput)
         bgImageInput.value = settings.theme_background_image || "";
     function applyThemePreview() {
@@ -2153,21 +2269,104 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.getElementById("theme-accent2")?.value || "#ff9a3c",
         );
         const bg = bgImageInput?.value?.trim();
-        if (bg) document.body.style.backgroundImage = `url('${bg}')`;
+        if (bg) {
+            document.body.style.backgroundImage = `url('${bg}')`;
+        } else {
+            document.body.style.backgroundImage = "";
+        }
+        advancedThemeFields.forEach((f) => {
+            const val =
+                document.getElementById(`theme-${f.key.replaceAll("_", "-")}`)
+                    ?.value || f.default;
+            document.documentElement.style.setProperty(f.cssVar, val);
+        });
     }
+
+    async function saveActiveThemeToBackend(themePayload) {
+        try {
+            await eel.update_theme_settings(themePayload)();
+        } catch (e) {}
+    }
+
+    async function applySavedTheme(themePayload) {
+        fillThemeInputs(themePayload);
+        applyThemePreview();
+        await saveActiveThemeToBackend(themePayload);
+    }
+    function renderSavedThemes() {
+        if (!savedThemesList) return;
+        const rows = [
+            `<div class="saved-theme-item"><span>Базовая тема</span><button class="select-theme-btn" data-theme-id="__default__">Выбрать</button></div>`,
+            ...savedThemes.map(
+                (theme) =>
+                    `<div class="saved-theme-item"><span>${theme.name}</span><div class="saved-theme-actions"><button class="select-theme-btn" data-theme-id="${theme.id}">Выбрать</button><button class="delete-theme-btn" data-theme-id="${theme.id}" title="Удалить"><i class="fas fa-trash"></i></button></div></div>`,
+            ),
+        ];
+        savedThemesList.innerHTML = rows.join("");
+        savedThemesList
+            .querySelectorAll(".select-theme-btn")
+            .forEach((selectBtn) => {
+                selectBtn.addEventListener("click", async () => {
+                    const { themeId } = selectBtn.dataset;
+                    if (themeId === "__default__") {
+                        await applySavedTheme(defaultTheme);
+                        toast({
+                            title: "Базовая тема применена",
+                            type: "success",
+                        });
+                        return;
+                    }
+                    const targetTheme = savedThemes.find(
+                        (t) => t.id === themeId,
+                    );
+                    if (!targetTheme) return;
+                    await applySavedTheme(targetTheme);
+                    toast({
+                        title: `Тема «${targetTheme.name}» применена`,
+                        type: "success",
+                    });
+                });
+            });
+        savedThemesList.querySelectorAll(".delete-theme-btn").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+                try {
+                    await eel.delete_saved_theme(btn.dataset.themeId)();
+                    await loadSavedThemes();
+                    renderSavedThemes();
+                    toast({ title: "Тема удалена", type: "success" });
+                } catch (e) {
+                    toast({ title: "Ошибка удаления темы", type: "error" });
+                }
+            });
+        });
+    }
+
+    bgImageInput?.addEventListener("input", applyThemePreview);
+    advancedThemeFields.forEach((f) =>
+        document
+            .getElementById(`theme-${f.key.replaceAll("_", "-")}`)
+            ?.addEventListener("input", applyThemePreview),
+    );
+
+    await loadSavedThemes();
+    renderSavedThemes();
     applyThemePreview();
     const saveThemeBtn = document.getElementById("save-theme-btn");
     saveThemeBtn?.addEventListener("click", async () => {
-        const payload = {
-            theme_bg: document.getElementById("theme-bg")?.value,
-            theme_panel: document.getElementById("theme-panel")?.value,
-            theme_text: document.getElementById("theme-text")?.value,
-            theme_accent: document.getElementById("theme-accent")?.value,
-            theme_accent2: document.getElementById("theme-accent2")?.value,
-            theme_background_image: bgImageInput?.value || "",
-        };
+        const themeName = themeNameInput?.value?.trim();
+        if (!themeName) {
+            toast({ title: "Укажите название темы", type: "error" });
+            return;
+        }
+        const payload = getCurrentThemePayload();
         try {
+            await eel.save_named_theme({
+                name: themeName,
+                ...payload,
+            })();
             await eel.update_theme_settings(payload)();
+            await loadSavedThemes();
+            renderSavedThemes();
             toast({ title: "Тема сохранена", type: "success" });
         } catch (e) {
             toast({ title: "Ошибка сохранения темы", type: "error" });

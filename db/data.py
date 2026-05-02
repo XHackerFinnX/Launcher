@@ -7,6 +7,7 @@ from pathlib import Path
 import eel
 import requests
 import minecraft_launcher_lib
+import json
 from datetime import datetime
 
 from db.database import create_connection
@@ -772,6 +773,116 @@ def update_theme_settings(payload):
     conn.close()
     return True
 
+@eel.expose
+def get_saved_themes():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS themes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            theme_bg TEXT NOT NULL,
+            theme_panel TEXT NOT NULL,
+            theme_text TEXT NOT NULL,
+            theme_accent TEXT NOT NULL,
+            theme_accent2 TEXT NOT NULL,
+            theme_background_image TEXT DEFAULT '',
+            theme_json TEXT DEFAULT '{}'
+        )
+        '''
+    )
+    cursor.execute("PRAGMA table_info(themes)")
+    theme_columns = {row[1] for row in cursor.fetchall()}
+    if "theme_json" not in theme_columns:
+        cursor.execute("ALTER TABLE themes ADD COLUMN theme_json TEXT DEFAULT '{}'")
+        conn.commit()
+    cursor.execute(
+        '''
+        SELECT id, name, theme_bg, theme_panel, theme_text, theme_accent, theme_accent2, theme_background_image, theme_json
+        FROM themes
+        ORDER BY id DESC
+        '''
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        {
+            "id": str(row[0]),
+            "name": row[1],
+            "theme_bg": row[2],
+            "theme_panel": row[3],
+            "theme_text": row[4],
+            "theme_accent": row[5],
+            "theme_accent2": row[6],
+            "theme_background_image": row[7] or "",
+            "theme_json": row[8] or "{}",
+        }
+        for row in rows
+    ]
+
+
+@eel.expose
+def save_named_theme(payload):
+    payload = payload or {}
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return {"ok": False, "error": "empty_name"}
+
+    theme = {
+        "theme_bg": payload.get("theme_bg", "#0e1018"),
+        "theme_panel": payload.get("theme_panel", "#161826"),
+        "theme_text": payload.get("theme_text", "#e6e8f0"),
+        "theme_accent": payload.get("theme_accent", "#ffb86c"),
+        "theme_accent2": payload.get("theme_accent2", "#ff9a3c"),
+        "theme_background_image": payload.get("theme_background_image", ""),
+        "theme_json": json.dumps(payload.get("theme_json", {}), ensure_ascii=False),
+    }
+
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(themes)")
+    theme_columns = {row[1] for row in cursor.fetchall()}
+    if "theme_json" not in theme_columns:
+        cursor.execute("ALTER TABLE themes ADD COLUMN theme_json TEXT DEFAULT '{}'")
+    cursor.execute(
+        '''
+        INSERT INTO themes (name, theme_bg, theme_panel, theme_text, theme_accent, theme_accent2, theme_background_image, theme_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(name) DO UPDATE SET
+            theme_bg=excluded.theme_bg,
+            theme_panel=excluded.theme_panel,
+            theme_text=excluded.theme_text,
+            theme_accent=excluded.theme_accent,
+            theme_accent2=excluded.theme_accent2,
+            theme_background_image=excluded.theme_background_image,
+            theme_json=excluded.theme_json
+        ''',
+        (
+            name,
+            theme["theme_bg"],
+            theme["theme_panel"],
+            theme["theme_text"],
+            theme["theme_accent"],
+            theme["theme_accent2"],
+            theme["theme_background_image"],
+            theme["theme_json"],
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@eel.expose
+def delete_saved_theme(theme_id):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM themes WHERE id = ?", (theme_id,))
+    conn.commit()
+    deleted = cursor.rowcount > 0
+    conn.close()
+    return {"ok": deleted}
 
 def _mods_dir(version_name):
     return Path(minecraft_directory) / version_name / "mods"
