@@ -2352,6 +2352,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (hiddenInput)
                     hiddenInput.value = `rgba(${r}, ${g}, ${b}, ${alpha})`;
                 if (alphaValue) alphaValue.textContent = alpha;
+                applyThemePreview();
             };
             colorInput?.addEventListener("input", sync);
             alphaInput?.addEventListener("input", sync);
