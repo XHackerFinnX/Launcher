@@ -26,7 +26,7 @@ def main():
     eel.init('web')
         
     file_html = 'main.html'
-    width = 1290
+    width = 1280
     height = 720
         
     # Проверка на установку Java

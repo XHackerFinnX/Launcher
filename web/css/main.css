@@ -2509,18 +2509,26 @@ html {
     background: var(--bg-2);
 }
 .saved-theme-item button {
-    background: var(--accent-soft);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);;
     border: 1px solid var(--border);
-    color: var(--text);
+    color: #1a1c28;;
     border-radius: 8px;
     padding: 6px 10px;
+    font-weight: 600;
+    transition: all var(--transition);
+    box-shadow: 0 4px 12px rgba(255, 184, 108, 0.25);
+}
+.saved-theme-item button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(255, 184, 108, 0.35);
 }
 .saved-theme-actions {
     display: flex;
     gap: 6px;
 }
 .delete-theme-btn {
-    background: rgba(248, 113, 113, 0.15) !important;
+    background: var(--danger) !important;
+    color: var(--danger);
 }
 .modpack-modal {
     position: fixed;
