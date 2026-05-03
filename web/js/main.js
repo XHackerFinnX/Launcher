@@ -762,7 +762,7 @@ function createServerCard(serverData, onDelete) {
             placeholder.style.alignItems = "center";
             placeholder.style.justifyContent = "center";
             placeholder.innerHTML =
-                '<i class="fas fa-server" style="font-size:32px;color:rgba(255,255,255,0.4)"></i>';
+                '<i class="fas fa-server" style="font-size:32px;color:var(--text-dim)"></i>';
             image.replaceWith(placeholder);
         };
     } else {
@@ -772,7 +772,7 @@ function createServerCard(serverData, onDelete) {
         image.style.alignItems = "center";
         image.style.justifyContent = "center";
         image.innerHTML =
-            '<i class="fas fa-server" style="font-size:32px;color:rgba(255,255,255,0.4)"></i>';
+            '<i class="fas fa-server" style="font-size:32px;color:var(--text-dim)"></i>';
     }
 
     const serverInfo = document.createElement("div");
@@ -2101,6 +2101,55 @@ try {
 } catch (e) {}
 
 // ---------- Settings tabs + customization ----------
+function getRootColorVar(varName, fallback) {
+    const value = getComputedStyle(document.documentElement)
+        .getPropertyValue(varName)
+        .trim();
+    return value || fallback;
+}
+
+function parseCssColorToRgbaParts(cssColor) {
+    const value = (cssColor || "").trim();
+    const hexMatch = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+        let hex = hexMatch[1];
+        if (hex.length === 3) {
+            hex = hex
+                .split("")
+                .map((c) => c + c)
+                .join("");
+        }
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return {
+            type: "hex",
+            hex: `#${hex}`,
+            alpha: 1,
+            raw: value,
+            rgba: `rgba(${r}, ${g}, ${b}, 1)`,
+        };
+    }
+    const rgbaMatch = value.match(
+        /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(0|0?\.\d+|1(?:\.0+)?))?\s*\)$/i,
+    );
+    if (rgbaMatch) {
+        const r = Number(rgbaMatch[1]);
+        const g = Number(rgbaMatch[2]);
+        const b = Number(rgbaMatch[3]);
+        const alpha = rgbaMatch[4] === undefined ? 1 : Number(rgbaMatch[4]);
+        const hex = `#${[r, g, b].map((n) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0")).join("")}`;
+        return {
+            type: "rgba",
+            hex,
+            alpha,
+            raw: value,
+            rgba: `rgba(${r}, ${g}, ${b}, ${alpha})`,
+        };
+    }
+    return { type: "raw", raw: value };
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     const tabs = document.querySelectorAll(".settings-tab");
     const panes = document.querySelectorAll("[data-settings-pane]");
@@ -2132,61 +2181,182 @@ document.addEventListener("DOMContentLoaded", async () => {
     const themeNameInput = document.getElementById("theme-name");
     const savedThemesList = document.getElementById("saved-themes-list");
     const defaultTheme = {
-        theme_bg: "#0e1018",
-        theme_panel: "#161826",
-        theme_text: "#e6e8f0",
-        theme_accent: "#ffb86c",
-        theme_accent2: "#ff9a3c",
+        theme_bg: getRootColorVar("--bg", "#0e1018"),
+        theme_panel: getRootColorVar("--panel", "#161826"),
+        theme_text: getRootColorVar("--text", "#e6e8f0"),
+        theme_accent: getRootColorVar("--accent", "#ffb86c"),
+        theme_accent2: getRootColorVar("--accent-2", "#ff9a3c"),
         theme_background_image: "",
     };
+    const colorFieldLabels = {
+        "bg-2": "Background 2",
+        "panel-2": "Panel 2",
+        "panel-hover": "Panel hover",
+        "text-muted": "Text muted",
+        "text-dim": "Text dim",
+        info: "Info",
+        success: "Success",
+        danger: "Danger",
+        "on-accent": "Text on accent",
+        "on-success": "Text on success",
+        "bg-deep": "Deep background",
+        "white-06": "White 6%",
+        "white-08": "White 8%",
+        "white-10": "White 10%",
+        "white-12": "White 12%",
+        "white-15": "White 15%",
+        "white-16": "White 16%",
+        "white-85": "White 85%",
+        "accent-soft": "Accent soft",
+        "accent-glow": "Accent glow",
+        "accent-glow-strong": "Accent glow str",
+        "accent-glow-soft": "Accent glow soft",
+        "accent-border": "Accent border",
+        "accent-focus": "Accent focus",
+        "accent-bg-soft": "Accent bg soft",
+        "accent-bg": "Accent bg",
+        "accent-bg-hover": "Accent bg hover",
+        "accent-bg-subtle": "Accent bg subtle",
+        "accent-glow-max": "Accent glow max",
+        "info-bg-soft": "Info bg soft",
+        "info-bg": "Info bg",
+        "info-bg-subtle": "Info bg subtle",
+        "success-bg-soft": "Success bg soft",
+        "success-bg-strong": "Success bg strong",
+        "success-border": "Success border",
+        "danger-bg-soft": "Danger bg soft",
+        "danger-bg": "Danger bg",
+        "danger-bg-hover": "Danger bg hover",
+        "danger-border": "Danger border",
+        overlay: "Overlay",
+        "overlay-strong": "Overlay strong",
+        "overlay-soft": "Overlay soft",
+        "black-fade": "Black fade",
+        "panel-glass": "Panel glass",
+        "panel-glass-strong": "Panel glass strong",
+        "panel-solid-soft": "Panel solid soft",
+        "bg-solid-soft": "Bg solid soft",
+        "shadow-text": "Shadow text",
+        "panel-mid-alpha": "Panel mid alpha",
+        "preview-grad-warm-1": "Preview warm 1",
+        "preview-grad-warm-2": "Preview warm 2",
+        "preview-grad-warm-3": "Preview warm 3",
+        "preview-grad-cool-1": "Preview cool 1",
+        "preview-grad-cool-2": "Preview cool 2",
+        "preview-grad-cool-3": "Preview cool 3",
+        "preview-grad-arcane-1": "Preview arcane 1",
+        "preview-grad-arcane-2": "Preview arcane 2",
+        "preview-grad-arcane-3": "Preview arcane 3",
+        "preview-grad-nature-1": "Preview nature 1",
+        "preview-grad-nature-2": "Preview nature 2",
+        "preview-grad-nature-3": "Preview nature 3",
+    };
     const advancedThemeFields = [
-        { key: "bg_2", label: "Фон 2", cssVar: "--bg-2", default: "#11131e" },
-        {
-            key: "panel_2",
-            label: "Панели 2",
-            cssVar: "--panel-2",
-            default: "#1c1f30",
-        },
-        {
-            key: "panel_hover",
-            label: "Hover панелей",
-            cssVar: "--panel-hover",
-            default: "#232740",
-        },
-        {
-            key: "text_muted",
-            label: "Текст muted",
-            cssVar: "--text-muted",
-            default: "#8b90a8",
-        },
-        {
-            key: "text_dim",
-            label: "Текст dim",
-            cssVar: "--text-dim",
-            default: "#5a607a",
-        },
-        { key: "info", label: "Info", cssVar: "--info", default: "#4fc3f7" },
-        {
-            key: "success",
-            label: "Success",
-            cssVar: "--success",
-            default: "#4ade80",
-        },
-        {
-            key: "danger",
-            label: "Danger",
-            cssVar: "--danger",
-            default: "#f87171",
-        },
-    ];
+        "--bg-2",
+        "--panel-2",
+        "--panel-hover",
+        "--text-muted",
+        "--text-dim",
+        "--info",
+        "--success",
+        "--danger",
+        "--on-accent",
+        "--on-success",
+        "--bg-deep",
+        "--white-06",
+        "--white-08",
+        "--white-10",
+        "--white-12",
+        "--white-15",
+        "--white-16",
+        "--white-85",
+        "--accent-soft",
+        "--accent-glow",
+        "--accent-glow-strong",
+        "--accent-glow-soft",
+        "--accent-border",
+        "--accent-focus",
+        "--accent-bg-soft",
+        "--accent-bg",
+        "--accent-bg-hover",
+        "--accent-bg-subtle",
+        "--accent-glow-max",
+        "--info-bg-soft",
+        "--info-bg",
+        "--info-bg-subtle",
+        "--success-bg-soft",
+        "--success-bg-strong",
+        "--success-border",
+        "--danger-bg-soft",
+        "--danger-bg",
+        "--danger-bg-hover",
+        "--danger-border",
+        "--overlay",
+        "--overlay-strong",
+        "--overlay-soft",
+        "--black-fade",
+        "--panel-glass",
+        "--panel-glass-strong",
+        "--panel-solid-soft",
+        "--bg-solid-soft",
+        "--shadow-text",
+        "--panel-mid-alpha",
+        "--preview-grad-warm-1",
+        "--preview-grad-warm-2",
+        "--preview-grad-warm-3",
+        "--preview-grad-cool-1",
+        "--preview-grad-cool-2",
+        "--preview-grad-cool-3",
+        "--preview-grad-arcane-1",
+        "--preview-grad-arcane-2",
+        "--preview-grad-arcane-3",
+        "--preview-grad-nature-1",
+        "--preview-grad-nature-2",
+        "--preview-grad-nature-3",
+    ].map((cssVar) => {
+        const rawDefault = getRootColorVar(cssVar, "");
+        const key = cssVar.replace(/^--/, "").replaceAll("-", "_");
+        const parsed = parseCssColorToRgbaParts(rawDefault);
+        return {
+            key,
+            cssVar,
+            default: rawDefault,
+            parsedDefault: parsed,
+            label:
+                colorFieldLabels[cssVar.replace(/^--/, "")] ||
+                cssVar.replace(/^--/, "").replaceAll("-", " "),
+        };
+    });
     const advancedGrid = document.getElementById("theme-advanced-grid");
     if (advancedGrid) {
         advancedGrid.innerHTML = advancedThemeFields
-            .map(
-                (f) =>
-                    `<label>${f.label}<input type="color" id="theme-${f.key.replaceAll("_", "-")}" value="${f.default}" /></label>`,
+            .map((f) =>
+                f.parsedDefault.type === "rgba"
+                    ? `<label>${f.label}<div class="rgba-editor"><input type="color" id="theme-${f.key.replaceAll("_", "-")}-color" value="${f.parsedDefault.hex}" /><input type="range" min="0" max="1" step="0.01" id="theme-${f.key.replaceAll("_", "-")}-alpha" class="theme-range-fields" value="${f.parsedDefault.alpha}" /><span id="theme-${f.key.replaceAll("_", "-")}-alpha-value">${f.parsedDefault.alpha}</span><input type="hidden" id="theme-${f.key.replaceAll("_", "-")}" value="${f.default}" /></div></label>`
+                    : `<label>${f.label}<input type="color" id="theme-${f.key.replaceAll("_", "-")}" value="${f.parsedDefault.hex || f.default}" /></label>`,
             )
             .join("");
+        advancedThemeFields.forEach((f) => {
+            if (f.parsedDefault.type !== "rgba") return;
+            const baseId = `theme-${f.key.replaceAll("_", "-")}`;
+            const colorInput = document.getElementById(`${baseId}-color`);
+            const alphaInput = document.getElementById(`${baseId}-alpha`);
+            const alphaValue = document.getElementById(`${baseId}-alpha-value`);
+            const hiddenInput = document.getElementById(baseId);
+            const sync = () => {
+                const hex = colorInput?.value || "#000000";
+                const alpha = alphaInput?.value || "1";
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                if (hiddenInput)
+                    hiddenInput.value = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                if (alphaValue) alphaValue.textContent = alpha;
+            };
+            colorInput?.addEventListener("input", sync);
+            alphaInput?.addEventListener("input", sync);
+            sync();
+        });
     }
     let savedThemes = [];
 
@@ -2207,15 +2377,21 @@ document.addEventListener("DOMContentLoaded", async () => {
                     ?.value || f.default;
         });
         return {
-            theme_bg: document.getElementById("theme-bg")?.value || "#0e1018",
+            theme_bg:
+                document.getElementById("theme-bg")?.value ||
+                getRootColorVar("--bg", "#0e1018"),
             theme_panel:
-                document.getElementById("theme-panel")?.value || "#161826",
+                document.getElementById("theme-panel")?.value ||
+                getRootColorVar("--panel", "#161826"),
             theme_text:
-                document.getElementById("theme-text")?.value || "#e6e8f0",
+                document.getElementById("theme-text")?.value ||
+                getRootColorVar("--text", "#e6e8f0"),
             theme_accent:
-                document.getElementById("theme-accent")?.value || "#ffb86c",
+                document.getElementById("theme-accent")?.value ||
+                getRootColorVar("--accent", "#ffb86c"),
             theme_accent2:
-                document.getElementById("theme-accent2")?.value || "#ff9a3c",
+                document.getElementById("theme-accent2")?.value ||
+                getRootColorVar("--accent-2", "#ff9a3c"),
             theme_background_image: bgImageInput?.value?.trim() || "",
             theme_json: themeJson,
         };
@@ -2238,10 +2414,21 @@ document.addEventListener("DOMContentLoaded", async () => {
             themeJson = JSON.parse(theme.theme_json || "{}");
         } catch (e) {}
         advancedThemeFields.forEach((f) => {
-            const el = document.getElementById(
-                `theme-${f.key.replaceAll("_", "-")}`,
-            );
-            if (el) el.value = themeJson[f.key] || f.default;
+            const id = `theme-${f.key.replaceAll("_", "-")}`;
+            const value = themeJson[f.key] || f.default;
+            const el = document.getElementById(id);
+            if (el) el.value = value;
+            if (f.parsedDefault.type === "rgba") {
+                const parsed = parseCssColorToRgbaParts(value);
+                const colorInput = document.getElementById(`${id}-color`);
+                const alphaInput = document.getElementById(`${id}-alpha`);
+                const alphaValue = document.getElementById(`${id}-alpha-value`);
+                if (colorInput && parsed.hex) colorInput.value = parsed.hex;
+                if (alphaInput && Number.isFinite(parsed.alpha))
+                    alphaInput.value = String(parsed.alpha);
+                if (alphaValue && Number.isFinite(parsed.alpha))
+                    alphaValue.textContent = String(parsed.alpha);
+            }
         });
     }
 
@@ -2296,7 +2483,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     function renderSavedThemes() {
         if (!savedThemesList) return;
         const rows = [
-            `<div class="saved-theme-item"><span>Базовая тема</span><button class="select-theme-btn" data-theme-id="__default__">Выбрать</button></div>`,
+            `<div class="saved-theme-item"><span>Стандартная тема лаунчера</span><button class="select-theme-btn" data-theme-id="__default__">Выбрать</button></div>`,
             ...savedThemes.map(
                 (theme) =>
                     `<div class="saved-theme-item"><span>${theme.name}</span><div class="saved-theme-actions"><button class="select-theme-btn" data-theme-id="${theme.id}">Выбрать</button><button class="delete-theme-btn" data-theme-id="${theme.id}" title="Удалить"><i class="fas fa-trash"></i></button></div></div>`,
@@ -2311,7 +2498,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (themeId === "__default__") {
                         await applySavedTheme(defaultTheme);
                         toast({
-                            title: "Базовая тема применена",
+                            title: "Стандартная тема применена",
                             type: "success",
                         });
                         return;
@@ -2347,6 +2534,34 @@ document.addEventListener("DOMContentLoaded", async () => {
             .getElementById(`theme-${f.key.replaceAll("_", "-")}`)
             ?.addEventListener("input", applyThemePreview),
     );
+
+    let activeThemeJson = {};
+    try {
+        activeThemeJson = JSON.parse(settings.theme_json || "{}");
+    } catch (e) {
+        activeThemeJson = {};
+    }
+    advancedThemeFields.forEach((f) => {
+        const id = `theme-${f.key.replaceAll("_", "-")}`;
+        const value = activeThemeJson[f.key];
+        if (!value) return;
+        const hiddenInput = document.getElementById(id);
+        if (hiddenInput) hiddenInput.value = value;
+        if (f.parsedDefault.type === "rgba") {
+            const parsed = parseCssColorToRgbaParts(value);
+            const colorInput = document.getElementById(`${id}-color`);
+            const alphaInput = document.getElementById(`${id}-alpha`);
+            const alphaValue = document.getElementById(`${id}-alpha-value`);
+            if (colorInput && parsed.hex) colorInput.value = parsed.hex;
+            if (alphaInput && Number.isFinite(parsed.alpha))
+                alphaInput.value = String(parsed.alpha);
+            if (alphaValue && Number.isFinite(parsed.alpha))
+                alphaValue.textContent = String(parsed.alpha);
+        } else {
+            const colorInput = document.getElementById(id);
+            if (colorInput) colorInput.value = value;
+        }
+    });
 
     await loadSavedThemes();
     renderSavedThemes();

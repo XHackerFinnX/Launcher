@@ -52,8 +52,8 @@
                     x2="100%"
                     y2="100%"
                 >
-                    <stop offset="0%" stop-color="#FFB86C" />
-                    <stop offset="100%" stop-color="#FF9A3C" />
+                    <stop offset="0%" stop-color="var(--accent)" />
+                    <stop offset="100%" stop-color="var(--accent-2)" />
                 </linearGradient>
             </defs>
         </svg>
@@ -232,12 +232,6 @@
                             </p>
                         </div>
                         <div class="page-actions">
-                            <button
-                                class="btn-primary"
-                                id="open-modpack-creator"
-                            >
-                                <i class="fas fa-plus"></i> Создать сборку
-                            </button>
                             <div class="search-wrapper">
                                 <i class="fas fa-search"></i>
                                 <input
@@ -281,7 +275,11 @@
                                 </button>
                             </div>
                             <div>
-                                <span style="font-size: 9px; color: #8b90a8"
+                                <span
+                                    style="
+                                        font-size: 9px;
+                                        color: var(--text-muted);
+                                    "
                                     >После обновления, рекомендуем проверить
                                     целостность файлов</span
                                 >
@@ -315,22 +313,29 @@
                             </div>
                         </div>
                     </div>
-
-                    <div class="filter-tabs" id="builds-filter">
-                        <button class="filter-tab active" data-filter="all">
-                            Все <span class="count" data-count="all">0</span>
-                        </button>
-                        <button class="filter-tab" data-filter="modpack">
-                            <i class="fas fa-box-archive"></i> Модпаки
-                            <span class="count" data-count="modpack">0</span>
-                        </button>
-                        <button class="filter-tab" data-filter="forge">
-                            <i class="fas fa-hammer"></i> Forge
-                            <span class="count" data-count="forge">0</span>
-                        </button>
-                        <button class="filter-tab" data-filter="fabric">
-                            <i class="fas fa-shirt"></i> Fabric
-                            <span class="count" data-count="fabric">0</span>
+                    <div style="display: flex;flex-direction: row;align-items: center;justify-content: space-between;margin-bottom: 20px;">
+                        <div class="filter-tabs" id="builds-filter">
+                            <button class="filter-tab active" data-filter="all">
+                                Все
+                                <span class="count" data-count="all">0</span>
+                            </button>
+                            <button class="filter-tab" data-filter="modpack">
+                                <i class="fas fa-box-archive"></i> Модпаки
+                                <span class="count" data-count="modpack"
+                                    >0</span
+                                >
+                            </button>
+                            <button class="filter-tab" data-filter="forge">
+                                <i class="fas fa-hammer"></i> Forge
+                                <span class="count" data-count="forge">0</span>
+                            </button>
+                            <button class="filter-tab" data-filter="fabric">
+                                <i class="fas fa-shirt"></i> Fabric
+                                <span class="count" data-count="fabric">0</span>
+                            </button>
+                        </div>
+                        <button class="btn-primary" id="open-modpack-creator">
+                            <i class="fas fa-plus"></i> Создать сборку
                         </button>
                     </div>
 
@@ -826,7 +831,11 @@
                                 placeholder="URL фонового изображения (необязательно)"
                                 style="margin-bottom: 10px"
                             />
-                            <button class="btn-primary" id="save-theme-btn">
+                            <button
+                                class="btn-primary"
+                                id="save-theme-btn"
+                                style="margin-top: 10px"
+                            >
                                 <i class="fas fa-floppy-disk"></i> Сохранить
                                 тему
                             </button>

@@ -157,6 +157,7 @@ def _ensure_settings_schema(cursor):
         "theme_accent": "TEXT",
         "theme_accent2": "TEXT",
         "theme_background_image": "TEXT DEFAULT ''",
+        "theme_json": "TEXT DEFAULT '{}'",
     }
     for column, column_type in required_columns.items():
         if column not in columns:
@@ -180,12 +181,13 @@ def ensure_settings_row():
             theme_text,
             theme_accent,
             theme_accent2,
-            theme_background_image
+            theme_background_image,
+            theme_json
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE NOT EXISTS (SELECT 1 FROM settings)
         ''',
-        (2048, 0, 0, 0, "", 1, "#0e1018", "#161826", "#e6e8f0", "#ffb86c", "#ff9a3c", "")
+        (2048, 0, 0, 0, "", 1, "#0e1018", "#161826", "#e6e8f0", "#ffb86c", "#ff9a3c", "", "{}")
     )
     conn.commit()
     conn.close()
@@ -208,12 +210,13 @@ def _update_setting_field(field: str, value):
             theme_text,
             theme_accent,
             theme_accent2,
-            theme_background_image
+            theme_background_image,
+            theme_json
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE NOT EXISTS (SELECT 1 FROM settings)
         ''',
-        (2048, 0, 0, 0, "", 1, "#0e1018", "#161826", "#e6e8f0", "#ffb86c", "#ff9a3c", "")
+        (2048, 0, 0, 0, "", 1, "#0e1018", "#161826", "#e6e8f0", "#ffb86c", "#ff9a3c", "", "{}")
     )
     cursor.execute(f"UPDATE settings SET {field} = ?", (value,))
     conn.commit()
@@ -262,7 +265,7 @@ def get_settings():
     cursor.execute(
         '''
         SELECT memory, checkbox, bit_checkbox, optimiz_checkbox, argument, open_log_viewer_checkbox,
-               theme_bg, theme_panel, theme_text, theme_accent, theme_accent2, theme_background_image
+               theme_bg, theme_panel, theme_text, theme_accent, theme_accent2, theme_background_image, theme_json
         FROM settings
         '''
     )
@@ -282,7 +285,8 @@ def get_settings():
             "theme_text": setting[8] or "#e6e8f0",
             "theme_accent": setting[9] or "#ffb86c",
             "theme_accent2": setting[10] or "#ff9a3c",
-            "theme_background_image": setting[11] or ""
+            "theme_background_image": setting[11] or "",
+            "theme_json": setting[12] or "{}"
         }
     else:
         return {
@@ -297,7 +301,8 @@ def get_settings():
             "theme_text": "#e6e8f0",
             "theme_accent": "#ffb86c",
             "theme_accent2": "#ff9a3c",
-            "theme_background_image": ""
+            "theme_background_image": "",
+            "theme_json": "{}"
         }
     
 @eel.expose
@@ -760,6 +765,7 @@ def update_theme_settings(payload):
         "theme_accent": "#ffb86c",
         "theme_accent2": "#ff9a3c",
         "theme_background_image": "",
+        "theme_json": "{}",
     }
     conn = create_connection(db_path)
     cursor = conn.cursor()
@@ -768,6 +774,8 @@ def update_theme_settings(payload):
         ensure_settings_row()
     for key, default in allowed.items():
         value = payload.get(key, default)
+        if key == "theme_json" and not isinstance(value, str):
+            value = json.dumps(value, ensure_ascii=False)
         cursor.execute(f"UPDATE settings SET {key} = ?", (value,))
     conn.commit()
     conn.close()
