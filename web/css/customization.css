@@ -484,6 +484,7 @@
         border-color var(--transition),
         transform var(--transition);
     min-height: 60px;
+    flex-direction: row;
 }
 .cust-advanced-grid > label.cust-adv-card:hover {
     border-color: var(--accent);

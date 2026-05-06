@@ -2727,7 +2727,7 @@ html {
     gap: 6px;
 }
 .delete-theme-btn {
-    background: var(--danger) !important;
+    /* background: var(--danger) !important; */
     color: var(--danger);
 }
 .modpack-modal {

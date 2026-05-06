@@ -10,6 +10,7 @@ import requests
 import minecraft_launcher_lib
 import json
 import time
+import uuid
 from datetime import datetime
 from urllib.parse import urljoin
 import urllib.error
@@ -35,6 +36,7 @@ def _load_network_config():
         "active_room": "",
         "nickname": "",
         "api_prefix": "/launcher",
+        "user_id": "",
     }
     try:
         if NETWORK_CONFIG_PATH.exists():
@@ -113,6 +115,7 @@ def save_network_config(backend_url, nickname="", active_room=""):
     cfg["nickname"] = str(nickname or "").strip()
     cfg["active_room"] = str(active_room or "").strip()
     cfg["api_prefix"] = str(cfg.get("api_prefix") or "/launcher").strip() or "/launcher"
+    cfg["user_id"] = str(cfg.get("user_id") or cfg.get("client_id") or uuid.uuid4())
     _save_network_config(cfg)
     return {"ok": True, "config": cfg}
 
@@ -124,12 +127,14 @@ def create_network_room(room_name="", room_password="", nickname=""):
         "password": str(room_password or "").strip(),
         "nickname": str(nickname or "").strip(),
     }
+    
+    cfg = _load_network_config()
+    payload["user_id"] = str(cfg.get("user_id") or cfg.get("client_id") or uuid.uuid4())
     if not payload["room_name"]:
         return {"ok": False, "error": "room_name_empty"}
     if not payload["nickname"]:
         return {"ok": False, "error": "nickname_empty"}
 
-    cfg = _load_network_config()
     api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
     result = _api_request_first_success([
         ("POST", f"{api_prefix}/rooms/create", payload),
@@ -141,9 +146,10 @@ def create_network_room(room_name="", room_password="", nickname=""):
         return {"ok": False, "error": result.get("error")}
     data = result.get("data") or {}
     room_id = str(data.get("room_id") or data.get("room") or payload["room_name"]).strip()
+    published_port = int((cfg.get("rooms", {}).get(payload["room_name"], {}) or {}).get("minecraft_port") or data.get("host_port") or 25565)
     endpoint_payload = {
-        "host_ip": _detect_local_ip(),
-        "host_port": int(data.get("host_port") or 25565),
+        "host_ip": _detect_public_ip() or _detect_local_ip(),
+        "host_port": published_port,
         "nickname": payload["nickname"],
     }
     _api_request_first_success([
@@ -153,6 +159,7 @@ def create_network_room(room_name="", room_password="", nickname=""):
     cfg = _load_network_config()
     cfg["active_room"] = room_id
     cfg["nickname"] = payload["nickname"]
+    cfg["user_id"] = payload["user_id"]
     _save_network_config(cfg)
     return {"ok": True, "room_id": room_id, "data": data}
 
@@ -164,6 +171,9 @@ def join_network_room(room_name="", room_password="", nickname=""):
         "password": str(room_password or "").strip(),
         "nickname": str(nickname or "").strip(),
     }
+    
+    cfg = _load_network_config()
+    payload["user_id"] = str(cfg.get("user_id") or cfg.get("client_id") or uuid.uuid4())
     if not payload["room_name"]:
         return {"ok": False, "error": "room_name_empty"}
     if not payload["nickname"]:
@@ -183,6 +193,7 @@ def join_network_room(room_name="", room_password="", nickname=""):
     cfg = _load_network_config()
     cfg["active_room"] = room_id
     cfg["nickname"] = payload["nickname"]
+    cfg["user_id"] = payload["user_id"]
     _save_network_config(cfg)
     return {"ok": True, "room_id": room_id, "data": data}
 
@@ -195,6 +206,20 @@ def get_network_peers(room_id=""):
         return {"ok": False, "error": "room_empty", "peers": []}
     cfg = _load_network_config()
     api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+    user_id = str(cfg.get("user_id") or cfg.get("client_id") or "").strip()
+    if user_id:
+        hb_payload = {
+            "user_id": user_id,
+            "nickname": str(cfg.get("nickname") or "Player"),
+            "ping_ms": 0,
+            "status": "Online",
+            "online": True,
+            "public_ip": str(cfg.get("last_public_ip") or ""),
+            "lan_ip": _detect_local_ip(),
+            "lan_port": 0,
+            "minecraft_port": int((cfg.get("rooms", {}).get(room, {}) or {}).get("minecraft_port") or 0),
+        }
+        _api_request("POST", f"{api_prefix}/rooms/{room}/heartbeat", payload=hb_payload, timeout=(4, 8))
     result = _api_request_first_success([
         ("GET", f"{api_prefix}/rooms/{room}/peers", None),
         ("GET", f"/chat/rooms/{room}/peers", None),
@@ -252,6 +277,44 @@ def get_turn_credentials():
         return {"ok": False, "error": "turn_credentials_invalid"}
     return {"ok": True, "turn": data}
 
+@eel.expose
+def set_local_minecraft_port(room_id: str = "", port: int = 0):
+    try:
+        port = int(port)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "invalid_port"}
+    if port < 1 or port > 65535:
+        return {"ok": False, "error": "port_out_of_range"}
+
+    cfg = _load_network_config()
+    room = str(room_id or cfg.get("active_room") or "").strip()
+    if not room:
+        return {"ok": False, "error": "room_empty"}
+
+    user_id = str(cfg.get("user_id") or cfg.get("client_id") or "").strip()
+    if not user_id:
+        user_id = str(uuid.uuid4())
+        cfg["user_id"] = user_id
+
+    public_ip = str(cfg.get("last_public_ip") or "").strip() or (_detect_public_ip() or "")
+    if public_ip:
+        cfg["last_public_ip"] = public_ip
+
+    cfg.setdefault("rooms", {}).setdefault(room, {})
+    cfg["rooms"][room]["minecraft_port"] = port
+    _save_network_config(cfg)
+
+    api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+    payload = {
+        "user_id": user_id,
+        "public_ip": public_ip,
+        "minecraft_port": port,
+    }
+    result = _api_request("POST", f"{api_prefix}/rooms/{room}/announce-port", payload=payload, timeout=(5, 12))
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error", "announce_failed")}
+
+    return {"ok": True, "room_id": room, "minecraft_port": port, "public_ip": public_ip}
 
 @eel.expose
 def get_connection_plan(room_id=""):
@@ -448,7 +511,7 @@ def register_network_extensions(
 
         # Tell backend about the port + public IP so other peers see it.
         result = _post(
-            "/rooms/announce",
+            f"/launcher/rooms/{room}/announce-port",
             {
                 "room_id": room,
                 "user_id": cfg.get("user_id") or cfg.get("client_id") or "",
@@ -469,7 +532,7 @@ def register_network_extensions(
         if not room:
             return {"ok": False, "error": "no active room"}
         result = _post(
-            "/rooms/leave",
+            f"/launcher/rooms/{room}/leave?user_id={(cfg.get('user_id') or cfg.get('client_id') or '')}",
             {
                 "room_id": room,
                 "user_id": cfg.get("user_id") or cfg.get("client_id") or "",

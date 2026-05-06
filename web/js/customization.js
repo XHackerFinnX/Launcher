@@ -242,6 +242,81 @@
         row.replaceWith(card);
     }
 
+    function enhanceAdvancedGrid() {
+        const grid = document.getElementById("theme-advanced-grid");
+        if (!grid) return;
+
+        Array.from(grid.querySelectorAll(":scope > label")).forEach((label) => {
+            if (label.classList.contains("cust-adv-card")) return;
+
+            const directColorInput = label.querySelector(
+                ':scope > input[type="color"]',
+            );
+            const rgbaEditor = label.querySelector(":scope > .rgba-editor");
+            const rgbaColorInput = rgbaEditor?.querySelector(
+                'input[type="color"]',
+            );
+            const hiddenInput = rgbaEditor?.querySelector(
+                'input[type="hidden"]',
+            );
+            const alphaInput = rgbaEditor?.querySelector('input[type="range"]');
+            const alphaValue = rgbaEditor?.querySelector("span");
+            const colorInput = directColorInput || rgbaColorInput;
+            if (!colorInput) return;
+
+            const labelTextNode = Array.from(label.childNodes).find(
+                (n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim(),
+            );
+            const title =
+                labelTextNode?.textContent?.trim() ||
+                label.dataset.label ||
+                "Цвет";
+
+            label.classList.add("cust-adv-card");
+            if (rgbaEditor) label.classList.add("has-rgba");
+
+            const swatch = document.createElement("span");
+            swatch.className = "cust-adv-swatch";
+            const meta = document.createElement("span");
+            meta.className = "cust-adv-meta";
+            const text = document.createElement("span");
+            text.className = "cust-adv-label";
+            text.textContent = title;
+            const hex = document.createElement("span");
+            hex.className = "cust-adv-hex";
+            meta.append(text, hex);
+
+            label.insertBefore(swatch, label.firstChild);
+            label.insertBefore(meta, swatch.nextSibling);
+
+            if (labelTextNode) labelTextNode.textContent = "";
+
+            const syncCard = () => {
+                const color = (colorInput.value || "").toUpperCase();
+                const alpha = alphaInput ? Number(alphaInput.value || 1) : null;
+                swatch.style.setProperty(
+                    "--swatch-color",
+                    alpha == null
+                        ? color
+                        : `rgba(${parseInt(color.slice(1, 3), 16)}, ${parseInt(color.slice(3, 5), 16)}, ${parseInt(color.slice(5, 7), 16)}, ${alpha})`,
+                );
+                hex.textContent =
+                    alpha == null ? color : `${color} · A:${alpha.toFixed(2)}`;
+                if (alphaValue) alphaValue.textContent = String(alpha);
+                if (hiddenInput && alpha != null) {
+                    const r = parseInt(color.slice(1, 3), 16);
+                    const g = parseInt(color.slice(3, 5), 16);
+                    const b = parseInt(color.slice(5, 7), 16);
+                    hiddenInput.value = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                }
+            };
+
+            colorInput.addEventListener("input", syncCard);
+            alphaInput?.addEventListener("input", syncCard);
+            syncCard();
+        });
+    }
+
     function bind() {
         // Sync swatches whenever any color picker changes
         COLOR_KEYS.forEach((key) => {
@@ -257,6 +332,13 @@
         });
 
         // Watch saved themes container for changes by legacy code
+        const advancedHost = $("#theme-advanced-grid");
+        if (advancedHost) {
+            const mo2 = new MutationObserver(() => enhanceAdvancedGrid());
+            mo2.observe(advancedHost, { childList: true, subtree: true });
+            enhanceAdvancedGrid();
+        }
+
         const savedHost = $("#saved-themes-list");
         if (savedHost) {
             const mo = new MutationObserver(() => rerenderSavedThemes());
@@ -271,6 +353,7 @@
         renderPresets();
         syncAllSwatches();
         bind();
+        enhanceAdvancedGrid();
     }
 
     if (document.readyState === "loading") {

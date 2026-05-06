@@ -113,7 +113,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     try {
         settings = (await eel.get_settings()()) || {};
     } catch (e) {
-        console.warn("[StoneLauncher] get_settings недоступно", e);
+        console.warn("[SLauncher] get_settings недоступно", e);
         settings = {
             memory: 4096,
             checkbox: 0,
@@ -1747,7 +1747,7 @@ async function getUpdatesFeed() {
         return await fetchUpdatesFeed(UPDATES_FEED_REMOTE_URL);
     } catch (error) {
         console.warn(
-            "[StoneLauncher] Не удалось загрузить updates.json из GitHub. Используется локальный fallback.",
+            "[SLauncher] Не удалось загрузить updates.json из GitHub. Используется локальный fallback.",
             error,
         );
     }
@@ -1756,7 +1756,7 @@ async function getUpdatesFeed() {
         return await fetchUpdatesFeed(UPDATES_FEED_LOCAL_FALLBACK_URL);
     } catch (error) {
         console.warn(
-            "[StoneLauncher] Не удалось загрузить локальный updates.json.",
+            "[SLauncher] Не удалось загрузить локальный updates.json.",
             error,
         );
         return [];
@@ -1780,7 +1780,7 @@ async function getManifestBuilds() {
         return parseManifest(json);
     } catch (error) {
         console.warn(
-            "[StoneLauncher] Не удалось загрузить манифест сборок из GitHub.",
+            "[SLauncher] Не удалось загрузить манифест сборок из GitHub.",
             error,
         );
     }
@@ -1794,7 +1794,7 @@ async function getManifestBuilds() {
         return parseManifest(json);
     } catch (error) {
         console.warn(
-            "[StoneLauncher] Не удалось загрузить локальный манифест сборок.",
+            "[SLauncher] Не удалось загрузить локальный манифест сборок.",
             error,
         );
         return [];
