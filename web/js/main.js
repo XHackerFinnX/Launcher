@@ -2701,3 +2701,242 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     search?.addEventListener("input", () => loadMods());
 });
+
+// // ---------- Network room (FastAPI backend + TURN control plane) ----------
+// (function initNetworkPanel() {
+//     document.addEventListener("DOMContentLoaded", async () => {
+//         const serversSection = document.getElementById("servers");
+//         if (!serversSection || document.getElementById("network-room-panel"))
+//             return;
+
+//         const panel = document.createElement("div");
+//         panel.id = "network-room-panel";
+//         panel.className = "launcher-card network-room-panel";
+//         panel.innerHTML = `
+//             <h3 class="network-room-title">Сетевая комната (Hamachi/Radmin стиль)</h3>
+//             <div class="network-grid">
+//                 <input id="network-backend-url" placeholder="https://your-domain.tld" />
+//                 <input id="network-room-id" placeholder="Название комнаты" />
+//                 <input id="network-room-password" type="password" placeholder="Пароль комнаты" />
+//                 <input id="network-nickname" placeholder="Ваш ник" />
+//                 <button id="network-save-btn">Сохранить</button>
+//                 <button id="network-create-btn">Создать</button>
+//                 <button id="network-join-btn">Подключиться</button>
+//                 <button id="network-refresh-btn">Обновить</button>
+//                 <button id="network-connect-btn">Проверить вход в игру</button>
+//                 <button id="network-auto-btn">Авто-маршрут</button>
+//             </div>
+//             <div id="network-status" class="network-room-status">Не настроено</div>
+//             <div id="network-peers" class="network-room-peers"></div>
+//         `;
+//         serversSection.appendChild(panel);
+
+//         const backendUrlEl = document.getElementById("network-backend-url");
+//         const roomEl = document.getElementById("network-room-id");
+//         const roomPasswordEl = document.getElementById("network-room-password");
+//         const nickEl = document.getElementById("network-nickname");
+//         const statusEl = document.getElementById("network-status");
+//         const peersEl = document.getElementById("network-peers");
+
+//         async function loadConfig() {
+//             try {
+//                 const cfg = await eel.get_network_config()();
+//                 backendUrlEl.value = cfg?.backend_url || "";
+//                 roomEl.value = cfg?.active_room || "";
+//                 nickEl.value = cfg?.nickname || "";
+//             } catch (e) {}
+//         }
+
+//         function barsForPing(ping) {
+//             const value = Number(ping);
+//             if (!Number.isFinite(value)) return 0;
+//             if (value <= 60) return 3;
+//             if (value <= 130) return 2;
+//             if (value <= 220) return 1;
+//             return 0;
+//         }
+
+//         function renderPeers(peers) {
+//             if (!Array.isArray(peers) || peers.length === 0) {
+//                 peersEl.innerHTML =
+//                     "<div class='empty-state'>В комнате пока нет пользователей.</div>";
+//                 return;
+//             }
+//             peersEl.innerHTML = peers
+//                 .map((p) => {
+//                     const name =
+//                         p?.nickname || p?.name || p?.user_id || "Unknown";
+//                     const ping = p?.ping_ms ?? p?.ping ?? "—";
+//                     const status =
+//                         p?.status || (p?.online ? "Online" : "Offline");
+//                     const bars = barsForPing(ping);
+//                     return `<div class='server-card' style='margin-bottom:8px'>
+//                         <div class='server-info'>
+//                             <div class='server-title'>${name}</div>
+//                             <div class='server-status'>
+//                                 <div><i class='fas fa-gauge'></i> ${ping} ms</div>
+//                                 <div class="network-signal" title="Сигнал сети">
+//                                     <span class="${bars >= 1 ? "on" : ""}"></span>
+//                                     <span class="${bars >= 2 ? "on" : ""}"></span>
+//                                     <span class="${bars >= 3 ? "on" : ""}"></span>
+//                                 </div>
+//                                 <div class='status ${String(status).toLowerCase()}'>${status}</div>
+//                             </div>
+//                         </div>
+//                     </div>`;
+//                 })
+//                 .join("");
+//         }
+
+//         async function refreshPeers() {
+//             const room = roomEl.value.trim();
+//             if (!room) {
+//                 statusEl.textContent = "Укажите room_id";
+//                 return;
+//             }
+//             statusEl.textContent = "Обновление...";
+//             try {
+//                 const res = await eel.get_network_peers(room)();
+//                 if (!res?.ok) {
+//                     statusEl.textContent = `Ошибка: ${res?.error || "unknown"}`;
+//                     renderPeers([]);
+//                     return;
+//                 }
+//                 statusEl.textContent = `Комната ${res.room_id}: ${res.peers.length} участ.`;
+//                 renderPeers(res.peers || []);
+//             } catch (e) {
+//                 statusEl.textContent = `Ошибка: ${e}`;
+//             }
+//         }
+
+//         document
+//             .getElementById("network-save-btn")
+//             .addEventListener("click", async () => {
+//                 try {
+//                     await eel.save_network_config(
+//                         backendUrlEl.value.trim(),
+//                         nickEl.value.trim(),
+//                         roomEl.value.trim(),
+//                     )();
+//                     statusEl.textContent = "Настройки сохранены";
+//                     toast({
+//                         title: "Сеть",
+//                         message: "Настройки сохранены",
+//                         type: "success",
+//                     });
+//                 } catch (e) {
+//                     statusEl.textContent = `Ошибка сохранения: ${e}`;
+//                 }
+//             });
+
+//         document
+//             .getElementById("network-create-btn")
+//             .addEventListener("click", async () => {
+//                 statusEl.textContent = "Создание комнаты...";
+//                 try {
+//                     await eel.save_network_config(
+//                         backendUrlEl.value.trim(),
+//                         nickEl.value.trim(),
+//                         roomEl.value.trim(),
+//                     )();
+//                     const res = await eel.create_network_room(
+//                         roomEl.value.trim(),
+//                         roomPasswordEl.value.trim(),
+//                         nickEl.value.trim(),
+//                     )();
+//                     if (!res?.ok) {
+//                         statusEl.textContent = `Ошибка создания: ${res?.error || "unknown"}`;
+//                         return;
+//                     }
+//                     roomEl.value = res.room_id || roomEl.value.trim();
+//                     statusEl.textContent = `Комната ${roomEl.value} создана`;
+//                     toast({
+//                         title: "Сеть",
+//                         message: "Комната создана",
+//                         type: "success",
+//                     });
+//                     await refreshPeers();
+//                 } catch (e) {
+//                     statusEl.textContent = `Ошибка создания: ${e}`;
+//                 }
+//             });
+
+//         document
+//             .getElementById("network-join-btn")
+//             .addEventListener("click", async () => {
+//                 statusEl.textContent = "Подключение к комнате...";
+//                 try {
+//                     await eel.save_network_config(
+//                         backendUrlEl.value.trim(),
+//                         nickEl.value.trim(),
+//                         roomEl.value.trim(),
+//                     )();
+//                     const res = await eel.join_network_room(
+//                         roomEl.value.trim(),
+//                         roomPasswordEl.value.trim(),
+//                         nickEl.value.trim(),
+//                     )();
+//                     if (!res?.ok) {
+//                         statusEl.textContent = `Ошибка подключения: ${res?.error || "unknown"}`;
+//                         return;
+//                     }
+//                     roomEl.value = res.room_id || roomEl.value.trim();
+//                     statusEl.textContent = `Подключено к комнате ${roomEl.value}`;
+//                     toast({
+//                         title: "Сеть",
+//                         message: "Подключение выполнено",
+//                         type: "success",
+//                     });
+//                     await refreshPeers();
+//                 } catch (e) {
+//                     statusEl.textContent = `Ошибка подключения: ${e}`;
+//                 }
+//             });
+
+//         document
+//             .getElementById("network-refresh-btn")
+//             .addEventListener("click", refreshPeers);
+//         document
+//             .getElementById("network-connect-btn")
+//             .addEventListener("click", async () => {
+//                 statusEl.textContent = "Проверка TCP-пути до хоста...";
+//                 try {
+//                     const res = await eel.test_room_connection(
+//                         roomEl.value.trim(),
+//                     )();
+//                     if (!res?.ok) {
+//                         statusEl.textContent = `Ошибка проверки: ${res?.error || "unknown"}`;
+//                         return;
+//                     }
+//                     statusEl.textContent = res.reachable
+//                         ? `Готово: ${res.endpoint.address} доступен. Можно входить в Minecraft.`
+//                         : `Нет TCP пути до ${res.endpoint.address}. Нужен VPN/туннель/relay.`;
+//                 } catch (e) {
+//                     statusEl.textContent = `Ошибка проверки: ${e}`;
+//                 }
+//             });
+//         document
+//             .getElementById("network-auto-btn")
+//             .addEventListener("click", async () => {
+//                 statusEl.textContent = "Определение оптимального маршрута...";
+//                 try {
+//                     const res = await eel.get_connection_plan(
+//                         roomEl.value.trim(),
+//                     )();
+//                     if (!res?.ok) {
+//                         statusEl.textContent = `Нет маршрута: ${res?.error || "unknown"}`;
+//                         return;
+//                     }
+//                     if (res.mode === "direct") {
+//                         statusEl.textContent = `Режим Direct: ${res.endpoint.address} доступен напрямую`;
+//                         return;
+//                     }
+//                     statusEl.textContent = `Режим Relay: direct недоступен, используйте TURN (${(res.turn?.urls || []).length} серв.)`;
+//                 } catch (e) {
+//                     statusEl.textContent = `Ошибка авто-маршрута: ${e}`;
+//                 }
+//             });
+
+//         await loadConfig();
+//     });
+// })();

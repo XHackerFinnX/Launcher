@@ -3,12 +3,18 @@ import shutil
 import logging
 import subprocess
 import sys
+import socket
 from pathlib import Path
 import eel
 import requests
 import minecraft_launcher_lib
 import json
+import time
 from datetime import datetime
+from urllib.parse import urljoin
+import urllib.error
+import urllib.request
+from typing import Any, Callable, Dict, Optional
 
 from db.database import create_connection
 from utils.config import minecraft_directory, VERSIONS_LAUNCHER
@@ -20,6 +26,254 @@ REQUEST_TIMEOUT = (5, 20)
 FILE_INTEGRITY_MANIFEST_URL = "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/launcher-file.json"
 logger = logging.getLogger(__name__)
 _log_viewer_process = None
+NETWORK_CONFIG_PATH = Path(r"C:\.stoneworld\db\network.json")
+
+
+def _load_network_config():
+    defaults = {
+        "backend_url": "",
+        "active_room": "",
+        "nickname": "",
+        "api_prefix": "/launcher",
+    }
+    try:
+        if NETWORK_CONFIG_PATH.exists():
+            data = json.loads(NETWORK_CONFIG_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                defaults.update(data)
+    except Exception:
+        logger.exception("Не удалось прочитать network config")
+    return defaults
+
+
+def _save_network_config(data: dict):
+    NETWORK_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    NETWORK_CONFIG_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def _api_request(method: str, path: str, payload=None, timeout=(5, 20)):
+    cfg = _load_network_config()
+    base_url = str(cfg.get("backend_url") or "").strip().rstrip("/")
+    if not base_url:
+        return {"ok": False, "error": "backend_url_empty"}
+    url = urljoin(base_url + "/", path.lstrip("/"))
+    try:
+        response = requests.request(method=method.upper(), url=url, json=payload, timeout=timeout)
+        data = response.json() if response.content else {}
+        if response.status_code >= 400:
+            return {"ok": False, "error": f"http_{response.status_code}", "details": data}
+        return {"ok": True, "data": data}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def _api_request_first_success(candidates):
+    last_error = "unknown"
+    for method, path, payload in candidates:
+        res = _api_request(method, path, payload=payload)
+        if res.get("ok"):
+            return res
+        last_error = res.get("error") or last_error
+        if str(last_error).startswith("http_404"):
+            continue
+        return res
+    return {"ok": False, "error": last_error}
+
+
+def _detect_local_ip():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("8.8.8.8", 80))
+        return sock.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        sock.close()
+
+
+def _check_tcp_connect(host: str, port: int, timeout=2.5):
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+@eel.expose
+def get_network_config():
+    return _load_network_config()
+
+
+@eel.expose
+def save_network_config(backend_url, nickname="", active_room=""):
+    cfg = _load_network_config()
+    cfg["backend_url"] = str(backend_url or "").strip()
+    cfg["nickname"] = str(nickname or "").strip()
+    cfg["active_room"] = str(active_room or "").strip()
+    cfg["api_prefix"] = str(cfg.get("api_prefix") or "/launcher").strip() or "/launcher"
+    _save_network_config(cfg)
+    return {"ok": True, "config": cfg}
+
+
+@eel.expose
+def create_network_room(room_name="", room_password="", nickname=""):
+    payload = {
+        "room_name": str(room_name or "").strip(),
+        "password": str(room_password or "").strip(),
+        "nickname": str(nickname or "").strip(),
+    }
+    if not payload["room_name"]:
+        return {"ok": False, "error": "room_name_empty"}
+    if not payload["nickname"]:
+        return {"ok": False, "error": "nickname_empty"}
+
+    cfg = _load_network_config()
+    api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+    result = _api_request_first_success([
+        ("POST", f"{api_prefix}/rooms/create", payload),
+        ("POST", f"{api_prefix}/rooms/{payload['room_name']}/create", payload),
+        ("POST", f"{api_prefix}/rooms/{payload['room_name']}/join", payload),
+        ("POST", "/chat/rooms/create", payload),
+    ])
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error")}
+    data = result.get("data") or {}
+    room_id = str(data.get("room_id") or data.get("room") or payload["room_name"]).strip()
+    endpoint_payload = {
+        "host_ip": _detect_local_ip(),
+        "host_port": int(data.get("host_port") or 25565),
+        "nickname": payload["nickname"],
+    }
+    _api_request_first_success([
+        ("POST", f"{api_prefix}/rooms/{room_id}/host", endpoint_payload),
+        ("POST", f"/chat/rooms/{room_id}/host", endpoint_payload),
+    ])
+    cfg = _load_network_config()
+    cfg["active_room"] = room_id
+    cfg["nickname"] = payload["nickname"]
+    _save_network_config(cfg)
+    return {"ok": True, "room_id": room_id, "data": data}
+
+
+@eel.expose
+def join_network_room(room_name="", room_password="", nickname=""):
+    payload = {
+        "room_name": str(room_name or "").strip(),
+        "password": str(room_password or "").strip(),
+        "nickname": str(nickname or "").strip(),
+    }
+    if not payload["room_name"]:
+        return {"ok": False, "error": "room_name_empty"}
+    if not payload["nickname"]:
+        return {"ok": False, "error": "nickname_empty"}
+
+    cfg = _load_network_config()
+    api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+    result = _api_request_first_success([
+        ("POST", f"{api_prefix}/rooms/join", payload),
+        ("POST", f"{api_prefix}/rooms/{payload['room_name']}/join", payload),
+        ("POST", "/chat/rooms/join", payload),
+    ])
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error")}
+    data = result.get("data") or {}
+    room_id = str(data.get("room_id") or data.get("room") or payload["room_name"]).strip()
+    cfg = _load_network_config()
+    cfg["active_room"] = room_id
+    cfg["nickname"] = payload["nickname"]
+    _save_network_config(cfg)
+    return {"ok": True, "room_id": room_id, "data": data}
+
+
+@eel.expose
+def get_network_peers(room_id=""):
+    cfg = _load_network_config()
+    room = str(room_id or cfg.get("active_room") or "").strip()
+    if not room:
+        return {"ok": False, "error": "room_empty", "peers": []}
+    cfg = _load_network_config()
+    api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+    result = _api_request_first_success([
+        ("GET", f"{api_prefix}/rooms/{room}/peers", None),
+        ("GET", f"/chat/rooms/{room}/peers", None),
+    ])
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error"), "peers": []}
+    data = result.get("data") or {}
+    peers = data.get("peers") if isinstance(data, dict) else []
+    return {"ok": True, "peers": peers or [], "room_id": room}
+
+
+@eel.expose
+def get_room_endpoint(room_id=""):
+    cfg = _load_network_config()
+    room = str(room_id or cfg.get("active_room") or "").strip()
+    if not room:
+        return {"ok": False, "error": "room_empty"}
+    api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+    result = _api_request_first_success([
+        ("GET", f"{api_prefix}/rooms/{room}/endpoint", None),
+        ("GET", f"/chat/rooms/{room}/endpoint", None),
+    ])
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error")}
+    endpoint = (result.get("data") or {}).get("endpoint") or {}
+    host = str(endpoint.get("host_ip") or "").strip()
+    port = int(endpoint.get("host_port") or 25565)
+    if not host:
+        return {"ok": False, "error": "endpoint_missing"}
+    return {"ok": True, "endpoint": {"host_ip": host, "host_port": port, "address": f"{host}:{port}"}}
+
+
+@eel.expose
+def test_room_connection(room_id=""):
+    endpoint_res = get_room_endpoint(room_id)
+    if not endpoint_res.get("ok"):
+        return endpoint_res
+    endpoint = endpoint_res["endpoint"]
+    reachable = _check_tcp_connect(endpoint["host_ip"], endpoint["host_port"])
+    return {"ok": True, "endpoint": endpoint, "reachable": reachable}
+
+
+@eel.expose
+def get_turn_credentials():
+    cfg = _load_network_config()
+    api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+    result = _api_request_first_success([
+        ("GET", f"{api_prefix}/turn-credentials", None),
+        ("GET", "/turn-credentials", None),
+    ])
+    if not result.get("ok"):
+        return {"ok": False, "error": result.get("error")}
+    data = result.get("data") or {}
+    if not data.get("username") or not data.get("credential"):
+        return {"ok": False, "error": "turn_credentials_invalid"}
+    return {"ok": True, "turn": data}
+
+
+@eel.expose
+def get_connection_plan(room_id=""):
+    probe = test_room_connection(room_id)
+    if not probe.get("ok"):
+        return probe
+    if probe.get("reachable"):
+        return {"ok": True, "mode": "direct", "endpoint": probe.get("endpoint")}
+    turn = get_turn_credentials()
+    if turn.get("ok"):
+        return {
+            "ok": True,
+            "mode": "relay",
+            "endpoint": probe.get("endpoint"),
+            "turn": turn.get("turn"),
+        }
+    return {
+        "ok": False,
+        "error": "no_direct_no_relay",
+        "endpoint": probe.get("endpoint"),
+        "turn_error": turn.get("error"),
+    }
 
 def _download_file_to_target(url: str, target_path: Path) -> None:
     target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -29,6 +283,205 @@ def _download_file_to_target(url: str, target_path: Path) -> None:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     file.write(chunk)
+                    
+_PUBLIC_IP_ENDPOINTS = (
+    "https://api.ipify.org?format=json",
+    "https://ifconfig.co/json",
+    "https://ipv4.icanhazip.com/",
+)
+
+
+def _detect_public_ip(timeout: float = 4.0) -> Optional[str]:
+    for url in _PUBLIC_IP_ENDPOINTS:
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "StoneLauncher/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode("utf-8", "ignore").strip()
+                if not raw:
+                    continue
+                if raw.startswith("{"):
+                    data = json.loads(raw)
+                    ip = data.get("ip") or data.get("address")
+                    if ip:
+                        return ip.strip()
+                else:
+                    return raw.strip()
+        except (urllib.error.URLError, socket.timeout, ValueError):
+            continue
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# Internal: TCP-ping                                                          #
+# --------------------------------------------------------------------------- #
+
+def _tcp_ping(host: str, port: int, timeout: float = 2.0, attempts: int = 3) -> Optional[int]:
+    """Return median TCP-handshake latency in ms, or None if all attempts failed."""
+    if not host or not port:
+        return None
+    samples = []
+    for _ in range(max(1, attempts)):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        t0 = time.perf_counter()
+        try:
+            sock.connect((host, int(port)))
+            samples.append((time.perf_counter() - t0) * 1000.0)
+        except (socket.timeout, OSError):
+            pass
+        finally:
+            try:
+                sock.close()
+            except OSError:
+                pass
+    if not samples:
+        return None
+    samples.sort()
+    return int(round(samples[len(samples) // 2]))
+
+
+# --------------------------------------------------------------------------- #
+# Public registration                                                         #
+# --------------------------------------------------------------------------- #
+
+def register_network_extensions(
+    load_cfg: Callable[[], Dict[str, Any]],
+    save_cfg: Callable[[Dict[str, Any]], None],
+    *,
+    _http_post: Optional[Callable[..., Any]] = None,
+    _http_get: Optional[Callable[..., Any]] = None,
+) -> None:
+    """Attach extra eel methods that share the existing config helpers.
+
+    Args:
+        load_cfg: function that returns the current network config dict
+                  (must contain at least 'backend_url' and may contain 'user_id'
+                  and 'active_room').
+        save_cfg: function that persists a config dict.
+        _http_post: optional already-existing helper from data.py with
+                    signature (path: str, body: dict, room_token: str | None) -> dict.
+                    If provided, will be used to talk to the FastAPI backend.
+        _http_get:  optional helper analogous to _http_post but for GET.
+    """
+
+    def _post(path: str, body: dict) -> dict:
+        cfg = load_cfg() or {}
+        backend = (cfg.get("backend_url") or "").rstrip("/")
+        if not backend:
+            return {"ok": False, "error": "backend_url not set"}
+        if _http_post:
+            try:
+                return _http_post(path, body, cfg.get("room_token"))
+            except Exception as exc:  # noqa: BLE001
+                return {"ok": False, "error": str(exc)}
+        # Fallback: direct urllib call
+        url = f"{backend}{path if path.startswith('/') else '/' + path}"
+        data = json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        token = cfg.get("room_token")
+        if token:
+            req.add_header("Authorization", f"Bearer {token}")
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                payload = resp.read().decode("utf-8", "ignore")
+                return json.loads(payload) if payload else {"ok": True}
+        except urllib.error.HTTPError as exc:
+            try:
+                return json.loads(exc.read().decode("utf-8", "ignore"))
+            except Exception:  # noqa: BLE001
+                return {"ok": False, "error": f"HTTP {exc.code}"}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc)}
+
+    # ----------------------------------------------------------------- #
+    # eel-exposed methods                                               #
+    # ----------------------------------------------------------------- #
+
+    @eel.expose
+    def get_my_public_ip() -> dict:
+        ip = _detect_public_ip()
+        if not ip:
+            return {"ok": False, "error": "could not detect public IP"}
+        cfg = load_cfg() or {}
+        cfg["last_public_ip"] = ip
+        save_cfg(cfg)
+        return {"ok": True, "ip": ip}
+
+    @eel.expose
+    def ping_address(host: str, port: int = 25565, attempts: int = 3) -> dict:
+        if not host:
+            return {"ok": False, "error": "host required"}
+        ms = _tcp_ping(str(host), int(port or 25565), attempts=int(attempts or 3))
+        if ms is None:
+            return {"ok": True, "reachable": False, "ping_ms": None}
+        return {"ok": True, "reachable": True, "ping_ms": ms}
+
+    @eel.expose
+    def set_local_minecraft_port(room_id: str, port: int) -> dict:
+        try:
+            port = int(port)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "invalid port"}
+        if port < 1 or port > 65535:
+            return {"ok": False, "error": "port out of range"}
+        cfg = load_cfg() or {}
+        room = (room_id or cfg.get("active_room") or "").strip()
+        if not room:
+            return {"ok": False, "error": "no active room"}
+
+        # Make sure we know our public IP — backend will store it next to the port
+        public_ip = cfg.get("last_public_ip") or _detect_public_ip()
+        if public_ip:
+            cfg["last_public_ip"] = public_ip
+
+        cfg.setdefault("rooms", {}).setdefault(room, {})
+        cfg["rooms"][room]["minecraft_port"] = port
+        save_cfg(cfg)
+
+        # Tell backend about the port + public IP so other peers see it.
+        result = _post(
+            "/rooms/announce",
+            {
+                "room_id": room,
+                "user_id": cfg.get("user_id") or cfg.get("client_id") or "",
+                "minecraft_port": port,
+                "public_ip": public_ip or "",
+            },
+        )
+        if isinstance(result, dict) and result.get("ok") is False:
+            # Even if backend rejected, keep local copy — peers refresh on their side later.
+            return {"ok": True, "warning": result.get("error", "backend rejected"),
+                    "minecraft_port": port, "public_ip": public_ip}
+        return {"ok": True, "minecraft_port": port, "public_ip": public_ip}
+
+    @eel.expose
+    def leave_network_room(room_id: str = "") -> dict:
+        cfg = load_cfg() or {}
+        room = (room_id or cfg.get("active_room") or "").strip()
+        if not room:
+            return {"ok": False, "error": "no active room"}
+        result = _post(
+            "/rooms/leave",
+            {
+                "room_id": room,
+                "user_id": cfg.get("user_id") or cfg.get("client_id") or "",
+            },
+        )
+        cfg["active_room"] = ""
+        if "rooms" in cfg and room in cfg["rooms"]:
+            cfg["rooms"].pop(room, None)
+        save_cfg(cfg)
+        if isinstance(result, dict) and result.get("ok") is False:
+            return {"ok": True, "warning": result.get("error", "backend error")}
+        return {"ok": True}
 
 @eel.expose
 def insert_version(version):

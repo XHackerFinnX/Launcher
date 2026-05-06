@@ -22,6 +22,8 @@
             href="https://raw.githubusercontent.com/XHackerFinnX/Domeae/refs/heads/master/db/file_zip/image/favicon.png"
         />
         <link rel="stylesheet" href="css/main.css" />
+        <link rel="stylesheet" href="css/customization.css" />
+        <link rel="stylesheet" href="css/network-room.css" />
         <!-- Eel: реальный для десктопа, мок для предпросмотра -->
         <script src="/eel.js"></script>
         <script src="js/eel-mock.js"></script>
@@ -95,6 +97,10 @@
                 <div class="menu-item" data-section="servers">
                     <i class="fas fa-server"></i>
                     <span>Сервера</span>
+                </div>
+                <div class="menu-item" data-section="network">
+                    <i class="fas fa-network-wired"></i>
+                    <span>Сеть</span>
                 </div>
                 <div class="menu-item" data-section="accounts">
                     <i class="fas fa-user"></i>
@@ -313,7 +319,15 @@
                             </div>
                         </div>
                     </div>
-                    <div style="display: flex;flex-direction: row;align-items: center;justify-content: space-between;margin-bottom: 20px;">
+                    <div
+                        style="
+                            display: flex;
+                            flex-direction: row;
+                            align-items: center;
+                            justify-content: space-between;
+                            margin-bottom: 20px;
+                        "
+                    >
                         <div class="filter-tabs" id="builds-filter">
                             <button class="filter-tab active" data-filter="all">
                                 Все
@@ -367,6 +381,258 @@
                     </div>
 
                     <div id="server-list" class="server-list"></div>
+                </section>
+
+                <section class="content-section" id="network">
+                    <div class="section-header">
+                        <h2>
+                            <i class="fas fa-network-wired"></i>
+                            Сеть
+                        </h2>
+                        <p class="section-subtitle">
+                            Своя комната как в Hamachi/Radmin — создавай,
+                            подключайся и заходи в LAN-мир Minecraft по
+                            IP:порту.
+                        </p>
+                    </div>
+
+                    <div
+                        id="network-room-panel"
+                        class="net-panel launcher-card"
+                    >
+                        <header class="net-header">
+                            <div class="net-header-titles">
+                                <h3 class="net-title">
+                                    <i class="fas fa-network-wired"></i>
+                                    Сетевая комната
+                                </h3>
+                                <p class="net-subtitle">
+                                    Видишь ник, пинг и IP каждого участника,
+                                    копируешь IP:порт хоста и заходишь в его
+                                    LAN-мир в Minecraft.
+                                </p>
+                            </div>
+                            <div
+                                class="net-status-pill"
+                                id="net-status-pill"
+                                data-state="idle"
+                            >
+                                <span class="net-status-dot"></span>
+                                <span class="net-status-text"
+                                    >Не подключено</span
+                                >
+                            </div>
+                        </header>
+
+                        <!-- ============== JOIN / CREATE ============== -->
+                        <div class="net-actions-grid">
+                            <article class="net-action-card">
+                                <header>
+                                    <span class="net-icon-circle"
+                                        ><i class="fas fa-plus"></i
+                                    ></span>
+                                    <div>
+                                        <h4>Создать комнату</h4>
+                                        <p>
+                                            Ты будешь хостом — твой IP узнают
+                                            участники
+                                        </p>
+                                    </div>
+                                </header>
+                                <div class="net-fields">
+                                    <label class="net-field">
+                                        <span>Имя комнаты</span>
+                                        <input
+                                            id="network-room-id"
+                                            type="text"
+                                            placeholder="например: stone-friends"
+                                            autocomplete="off"
+                                        />
+                                    </label>
+                                    <label class="net-field">
+                                        <span>Пароль</span>
+                                        <input
+                                            id="network-room-password"
+                                            type="password"
+                                            placeholder="придумай пароль"
+                                            autocomplete="new-password"
+                                        />
+                                    </label>
+                                    <label class="net-field">
+                                        <span>Твой ник</span>
+                                        <input
+                                            id="network-nickname"
+                                            type="text"
+                                            placeholder="как тебя видят"
+                                            autocomplete="off"
+                                        />
+                                    </label>
+                                </div>
+                                <div class="net-buttons">
+                                    <button
+                                        id="network-create-btn"
+                                        class="net-btn net-btn-primary"
+                                    >
+                                        <i class="fas fa-plus"></i> Создать
+                                    </button>
+                                    <button
+                                        id="network-join-btn"
+                                        class="net-btn"
+                                    >
+                                        <i class="fas fa-right-to-bracket"></i>
+                                        Подключиться
+                                    </button>
+                                </div>
+                            </article>
+
+                            <article class="net-action-card net-me-card">
+                                <header>
+                                    <span class="net-icon-circle"
+                                        ><i class="fas fa-user"></i
+                                    ></span>
+                                    <div>
+                                        <h4>Мой статус</h4>
+                                        <p>
+                                            Эти данные видят участники комнаты
+                                        </p>
+                                    </div>
+                                </header>
+                                <div class="net-me-rows">
+                                    <div class="net-me-row">
+                                        <span class="net-me-label"
+                                            >Публичный IP</span
+                                        >
+                                        <span
+                                            class="net-me-value"
+                                            id="net-my-ip"
+                                            >—</span
+                                        >
+                                        <button
+                                            class="net-copy-btn"
+                                            data-copy-target="net-my-ip"
+                                            title="Скопировать"
+                                        >
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                    <div class="net-me-row">
+                                        <span class="net-me-label"
+                                            >LAN порт Minecraft</span
+                                        >
+                                        <input
+                                            id="net-my-port"
+                                            type="number"
+                                            min="1"
+                                            max="65535"
+                                            placeholder="25565"
+                                            class="net-port-input"
+                                        />
+                                        <button
+                                            class="net-btn net-btn-ghost"
+                                            id="net-publish-port"
+                                        >
+                                            <i class="fas fa-bullhorn"></i>
+                                            Опубликовать
+                                        </button>
+                                    </div>
+                                    <p class="net-me-hint">
+                                        Открой мир: <kbd>Esc</kbd> &rarr;
+                                        &laquo;Открыть для сети&raquo; &rarr;
+                                        запомни порт, введи его выше и нажми
+                                        &laquo;Опубликовать&raquo; &mdash;
+                                        участники увидят твой IP:порт.
+                                    </p>
+                                </div>
+                            </article>
+                        </div>
+
+                        <!-- ============== HOW TO PLAY HINT ============== -->
+                        <details class="net-howto">
+                            <summary>
+                                <i class="fas fa-circle-info"></i> Как играть
+                                вместе (3 шага)
+                            </summary>
+                            <ol>
+                                <li>
+                                    Хост создаёт комнату и публикует свой
+                                    LAN-порт.
+                                </li>
+                                <li>
+                                    Участники подключаются по имени + паролю и
+                                    копируют IP:порт хоста.
+                                </li>
+                                <li>
+                                    В Minecraft &rarr; &laquo;Сетевая
+                                    игра&raquo; &rarr; &laquo;Прямое
+                                    подключение&raquo; &rarr; вставить IP:порт.
+                                </li>
+                            </ol>
+                        </details>
+
+                        <!-- ============== PEERS LIST ============== -->
+                        <section class="net-peers-section">
+                            <header class="net-peers-head">
+                                <h4>Участники комнаты</h4>
+                                <div class="net-peers-actions">
+                                    <button
+                                        id="network-refresh-btn"
+                                        class="net-btn net-btn-ghost"
+                                    >
+                                        <i class="fas fa-rotate"></i> Обновить
+                                    </button>
+                                    <button
+                                        id="network-connect-btn"
+                                        class="net-btn net-btn-ghost"
+                                    >
+                                        <i class="fas fa-route"></i> Тест
+                                        маршрута
+                                    </button>
+                                    <button
+                                        id="network-auto-btn"
+                                        class="net-btn net-btn-ghost"
+                                    >
+                                        <i
+                                            class="fas fa-wand-magic-sparkles"
+                                        ></i>
+                                        Авто-маршрут
+                                    </button>
+                                </div>
+                            </header>
+                            <div
+                                id="network-peers"
+                                class="net-peers-list"
+                                aria-live="polite"
+                            ></div>
+                            <div id="network-status" class="net-status-line">
+                                Не настроено
+                            </div>
+                        </section>
+
+                        <!-- ============== ADVANCED ============== -->
+                        <details class="net-advanced">
+                            <summary>
+                                <i class="fas fa-sliders"></i> Сервер и
+                                расширенные настройки
+                            </summary>
+                            <div class="net-fields">
+                                <label class="net-field net-field-wide">
+                                    <span>Backend URL (сигналинг)</span>
+                                    <input
+                                        id="network-backend-url"
+                                        type="text"
+                                        placeholder="https://2p2p.ru/launcher"
+                                        autocomplete="off"
+                                    />
+                                </label>
+                            </div>
+                            <div class="net-buttons">
+                                <button id="network-save-btn" class="net-btn">
+                                    <i class="fas fa-floppy-disk"></i> Сохранить
+                                    настройки
+                                </button>
+                            </div>
+                        </details>
+                    </div>
                 </section>
 
                 <!-- ===== ACCOUNTS ===== -->
@@ -770,79 +1036,299 @@
                         class="settings-container hidden"
                         data-settings-pane="customization"
                     >
-                        <div class="settings-item">
-                            <h3 class="settings-subheader">
-                                <span class="settings-subheader-icon"
-                                    ><i class="fas fa-palette"></i></span
-                                >Кастомизация
-                            </h3>
-                            <div class="theme-grid">
-                                <label
-                                    >Фон
-                                    <input
-                                        type="color"
-                                        id="theme-bg"
-                                        value="#0e1018"
-                                /></label>
-                                <label
-                                    >Панели
-                                    <input
-                                        type="color"
-                                        id="theme-panel"
-                                        value="#161826"
-                                /></label>
-                                <label
-                                    >Текст
-                                    <input
-                                        type="color"
-                                        id="theme-text"
-                                        value="#e6e8f0"
-                                /></label>
-                                <label
-                                    >Акцент
-                                    <input
-                                        type="color"
-                                        id="theme-accent"
-                                        value="#ffb86c"
-                                /></label>
-                                <label
-                                    >Акцент 2
-                                    <input
-                                        type="color"
-                                        id="theme-accent2"
-                                        value="#ff9a3c"
-                                /></label>
-                            </div>
-                            <div
-                                class="theme-grid"
-                                id="theme-advanced-grid"
-                            ></div>
-                            <input
-                                type="text"
-                                id="theme-name"
-                                class="account-input"
-                                placeholder="Название темы"
-                                style="margin-bottom: 10px"
-                            />
-                            <input
-                                type="text"
-                                id="theme-background-image"
-                                class="account-input"
-                                placeholder="URL фонового изображения (необязательно)"
-                                style="margin-bottom: 10px"
-                            />
-                            <button
-                                class="btn-primary"
-                                id="save-theme-btn"
-                                style="margin-top: 10px"
+                        <div class="settings-item cust-root">
+                            <header class="cust-header">
+                                <h3 class="settings-subheader">
+                                    <span class="settings-subheader-icon"
+                                        ><i class="fas fa-palette"></i
+                                    ></span>
+                                    Кастомизация
+                                </h3>
+                                <div class="cust-header-actions">
+                                    <button
+                                        type="button"
+                                        class="cust-ghost-btn"
+                                        id="cust-reset-defaults"
+                                    >
+                                        <i class="fas fa-rotate-left"></i>
+                                        Сбросить
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="cust-primary-btn"
+                                        id="save-theme-btn"
+                                    >
+                                        <i class="fas fa-floppy-disk"></i>
+                                        Сохранить тему
+                                    </button>
+                                </div>
+                            </header>
+
+                            <!-- ============== LIVE PREVIEW ============== -->
+                            <section
+                                class="cust-preview"
+                                aria-label="Предпросмотр темы"
                             >
-                                <i class="fas fa-floppy-disk"></i> Сохранить
-                                тему
-                            </button>
-                            <div class="saved-themes">
-                                <h4>Сохраненные темы</h4>
-                                <div id="saved-themes-list"></div>
-                            </div>
+                                <div
+                                    class="cust-preview-window"
+                                    id="cust-preview-window"
+                                >
+                                    <div class="cust-preview-topbar">
+                                        <span
+                                            class="cust-preview-dot dot-r"
+                                        ></span>
+                                        <span
+                                            class="cust-preview-dot dot-y"
+                                        ></span>
+                                        <span
+                                            class="cust-preview-dot dot-g"
+                                        ></span>
+                                        <span class="cust-preview-title"
+                                            >StoneLauncher · Превью</span
+                                        >
+                                    </div>
+                                    <div class="cust-preview-body">
+                                        <div class="cust-preview-side">
+                                            <span
+                                                class="cust-preview-nav active"
+                                                >Главная</span
+                                            >
+                                            <span class="cust-preview-nav"
+                                                >Серверы</span
+                                            >
+                                            <span class="cust-preview-nav"
+                                                >Настройки</span
+                                            >
+                                        </div>
+                                        <div class="cust-preview-main">
+                                            <div class="cust-preview-card">
+                                                <span class="cust-preview-pill"
+                                                    >v1.20.1</span
+                                                >
+                                                <h4>Привет, игрок</h4>
+                                                <p>
+                                                    Так будут выглядеть карточки
+                                                    и текст.
+                                                </p>
+                                                <button
+                                                    class="cust-preview-cta"
+                                                >
+                                                    Играть
+                                                </button>
+                                            </div>
+                                            <div class="cust-preview-card alt">
+                                                <p class="cust-preview-muted">
+                                                    Второстепенная панель
+                                                </p>
+                                                <div class="cust-preview-bar">
+                                                    <span></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <!-- ============== PRESETS ============== -->
+                            <section class="cust-section">
+                                <div class="cust-section-head">
+                                    <h4>Пресеты</h4>
+                                    <span class="cust-section-hint"
+                                        >Готовые палитры — кликни, чтобы
+                                        применить</span
+                                    >
+                                </div>
+                                <div class="cust-presets" id="cust-presets">
+                                    <!-- Filled by customization.js -->
+                                </div>
+                            </section>
+
+                            <!-- ============== CORE COLORS ============== -->
+                            <section class="cust-section">
+                                <div class="cust-section-head">
+                                    <h4>Основные цвета</h4>
+                                    <span class="cust-section-hint"
+                                        >Каждая плитка управляет своей
+                                        переменной CSS</span
+                                    >
+                                </div>
+                                <div class="cust-color-grid">
+                                    <label
+                                        class="cust-color-card"
+                                        data-color-target="theme-bg"
+                                    >
+                                        <span
+                                            class="cust-color-swatch"
+                                            data-swatch-for="theme-bg"
+                                        ></span>
+                                        <span class="cust-color-meta">
+                                            <span class="cust-color-label"
+                                                >Фон</span
+                                            >
+                                            <span
+                                                class="cust-color-hex"
+                                                data-hex-for="theme-bg"
+                                                >#0e1018</span
+                                            >
+                                        </span>
+                                        <input
+                                            type="color"
+                                            id="theme-bg"
+                                            value="#0e1018"
+                                        />
+                                    </label>
+
+                                    <label
+                                        class="cust-color-card"
+                                        data-color-target="theme-panel"
+                                    >
+                                        <span
+                                            class="cust-color-swatch"
+                                            data-swatch-for="theme-panel"
+                                        ></span>
+                                        <span class="cust-color-meta">
+                                            <span class="cust-color-label"
+                                                >Панели</span
+                                            >
+                                            <span
+                                                class="cust-color-hex"
+                                                data-hex-for="theme-panel"
+                                                >#161826</span
+                                            >
+                                        </span>
+                                        <input
+                                            type="color"
+                                            id="theme-panel"
+                                            value="#161826"
+                                        />
+                                    </label>
+
+                                    <label
+                                        class="cust-color-card"
+                                        data-color-target="theme-text"
+                                    >
+                                        <span
+                                            class="cust-color-swatch"
+                                            data-swatch-for="theme-text"
+                                        ></span>
+                                        <span class="cust-color-meta">
+                                            <span class="cust-color-label"
+                                                >Текст</span
+                                            >
+                                            <span
+                                                class="cust-color-hex"
+                                                data-hex-for="theme-text"
+                                                >#e6e8f0</span
+                                            >
+                                        </span>
+                                        <input
+                                            type="color"
+                                            id="theme-text"
+                                            value="#e6e8f0"
+                                        />
+                                    </label>
+
+                                    <label
+                                        class="cust-color-card"
+                                        data-color-target="theme-accent"
+                                    >
+                                        <span
+                                            class="cust-color-swatch"
+                                            data-swatch-for="theme-accent"
+                                        ></span>
+                                        <span class="cust-color-meta">
+                                            <span class="cust-color-label"
+                                                >Акцент</span
+                                            >
+                                            <span
+                                                class="cust-color-hex"
+                                                data-hex-for="theme-accent"
+                                                >#ffb86c</span
+                                            >
+                                        </span>
+                                        <input
+                                            type="color"
+                                            id="theme-accent"
+                                            value="#ffb86c"
+                                        />
+                                    </label>
+
+                                    <label
+                                        class="cust-color-card"
+                                        data-color-target="theme-accent2"
+                                    >
+                                        <span
+                                            class="cust-color-swatch"
+                                            data-swatch-for="theme-accent2"
+                                        ></span>
+                                        <span class="cust-color-meta">
+                                            <span class="cust-color-label"
+                                                >Акцент 2</span
+                                            >
+                                            <span
+                                                class="cust-color-hex"
+                                                data-hex-for="theme-accent2"
+                                                >#ff9a3c</span
+                                            >
+                                        </span>
+                                        <input
+                                            type="color"
+                                            id="theme-accent2"
+                                            value="#ff9a3c"
+                                        />
+                                    </label>
+                                </div>
+
+                                <!-- Advanced fields are appended here by existing main.js -->
+                                <div
+                                    class="theme-grid cust-advanced-grid"
+                                    id="theme-advanced-grid"
+                                ></div>
+                            </section>
+
+                            <!-- ============== METADATA ============== -->
+                            <section class="cust-section">
+                                <div class="cust-section-head">
+                                    <h4>Метаданные темы</h4>
+                                    <span class="cust-section-hint"
+                                        >Имя и фоновое изображение</span
+                                    >
+                                </div>
+                                <div class="cust-meta-row">
+                                    <div class="cust-input-wrap">
+                                        <i class="fas fa-tag"></i>
+                                        <input
+                                            type="text"
+                                            id="theme-name"
+                                            class="cust-input"
+                                            placeholder="Название темы (например: Закат)"
+                                        />
+                                    </div>
+                                    <div class="cust-input-wrap">
+                                        <i class="fas fa-image"></i>
+                                        <input
+                                            type="text"
+                                            id="theme-background-image"
+                                            class="cust-input"
+                                            placeholder="URL фонового изображения (необязательно)"
+                                        />
+                                    </div>
+                                </div>
+                            </section>
+
+                            <!-- ============== SAVED THEMES ============== -->
+                            <section class="cust-section saved-themes">
+                                <div class="cust-section-head">
+                                    <h4>Сохранённые темы</h4>
+                                    <span class="cust-section-hint"
+                                        >Клик по карточке — применить</span
+                                    >
+                                </div>
+                                <div
+                                    id="saved-themes-list"
+                                    class="cust-saved-list"
+                                ></div>
+                            </section>
                         </div>
                     </div>
 
@@ -1033,6 +1519,8 @@
         </div>
 
         <script src="js/main.js"></script>
+        <script src="js/customization.js"></script>
+        <script src="js/network-room.js"></script>
         <script>
             function toggleServerSelect() {
                 var versionSelect = document.querySelector(".version-select");

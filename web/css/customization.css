@@ -1,0 +1,749 @@
+/* ==========================================================================
+   StoneLauncher · Customization tab redesign
+   Append this file to css/main.css, OR <link rel="stylesheet"> after main.css
+   Uses existing tokens: --bg, --panel, --text, --text-muted, --text-dim,
+   --accent, --accent-2, --border, --on-accent, --transition.
+   ========================================================================== */
+:root {
+    --bg: #0e1018;
+    --bg-2: #11131e;
+    --panel: #161826;
+    --panel-2: #1c1f30;
+    --panel-hover: #232740;
+    --white-06: rgba(255, 255, 255, 0.06);
+    --white-08: rgba(255, 255, 255, 0.08);
+    --white-10: rgba(255, 255, 255, 0.1);
+    --white-12: rgba(255, 255, 255, 0.12);
+    --white-15: rgba(255, 255, 255, 0.15);
+    --white-16: rgba(255, 255, 255, 0.16);
+    --white-85: rgba(255, 255, 255, 0.85);
+    --border: var(--white-06);
+    --border-strong: var(--white-12);
+    --text: #e6e8f0;
+    --text-muted: #8b90a8;
+    --text-dim: #5a607a;
+    --accent: #ffb86c;
+    --accent-2: #ff9a3c;
+    --accent-soft: rgba(255, 184, 108, 0.12);
+    --info: #4fc3f7;
+    --success: #4ade80;
+    --danger: #f87171;
+    --on-accent: #1a1c28;
+    --on-success: #0a1f10;
+    --bg-deep: #0b0d15;
+    --accent-glow: rgba(255, 184, 108, 0.3);
+    --accent-glow-strong: rgba(255, 184, 108, 0.35);
+    --accent-glow-soft: rgba(255, 184, 108, 0.25);
+    --accent-border: rgba(255, 184, 108, 0.2);
+    --accent-focus: rgba(255, 184, 108, 0.15);
+    --accent-bg-soft: rgba(255, 184, 108, 0.08);
+    --accent-bg: rgba(255, 184, 108, 0.12);
+    --accent-bg-hover: rgba(255, 184, 108, 0.1);
+    --info-bg-soft: rgba(79, 195, 247, 0.12);
+    --info-bg: rgba(79, 195, 247, 0.08);
+    --success-bg-soft: rgba(74, 222, 128, 0.12);
+    --success-bg-strong: rgba(74, 222, 128, 0.9);
+    --success-border: rgba(74, 222, 128, 0.2);
+    --danger-bg-soft: rgba(248, 113, 113, 0.08);
+    --danger-bg: rgba(248, 113, 113, 0.12);
+    --danger-bg-hover: rgba(248, 113, 113, 0.1);
+    --danger-border: rgba(248, 113, 113, 0.2);
+    --overlay: rgba(0, 0, 0, 0.6);
+    --overlay-strong: rgba(0, 0, 0, 0.7);
+    --overlay-soft: rgba(0, 0, 0, 0.5);
+    --black-fade: rgba(0, 0, 0, 0.1);
+    --panel-glass: rgba(17, 19, 30, 0.7);
+    --panel-glass-strong: rgba(17, 19, 30, 0.85);
+    --panel-solid-soft: rgba(22, 24, 38, 0.95);
+    --bg-solid-soft: rgba(14, 16, 24, 0.95);
+    --preview-grad-warm-1: #2c1810;
+    --preview-grad-warm-2: #4a2818;
+    --preview-grad-warm-3: #6b3a1c;
+    --preview-grad-cool-1: #1a2a3e;
+    --preview-grad-cool-2: #244266;
+    --preview-grad-cool-3: #2e5b8a;
+    --preview-grad-arcane-1: #2e1a3e;
+    --preview-grad-arcane-2: #4a2466;
+    --preview-grad-arcane-3: #6b3a8a;
+    --preview-grad-nature-1: #1a3e2a;
+    --preview-grad-nature-2: #246644;
+    --preview-grad-nature-3: #2e8a5b;
+    --shadow-text: rgba(0, 0, 0, 0.4);
+    --accent-bg-subtle: rgba(255, 184, 108, 0.05);
+    --accent-glow-max: rgba(255, 184, 108, 0.45);
+    --panel-mid-alpha: rgba(28, 31, 48, 0.6);
+    --info-bg-subtle: rgba(79, 195, 247, 0.04);
+    --radius-sm: 8px;
+    --radius: 12px;
+    --radius-lg: 16px;
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow: 0 8px 24px var(--shadow-text);
+    --shadow-lg: 0 16px 48px var(--overlay-soft);
+    --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==========================================================================
+   StoneLauncher · Customization tab redesign
+   Append this file to css/main.css, OR <link rel="stylesheet"> after main.css
+   Uses existing tokens: --bg, --panel, --text, --text-muted, --text-dim,
+   --accent, --accent-2, --border, --on-accent, --transition.
+   ========================================================================== */
+
+.cust-root {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.cust-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
+.cust-header .settings-subheader {
+    margin: 0;
+}
+
+.cust-header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.cust-primary-btn,
+.cust-ghost-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        transform var(--transition),
+        background var(--transition),
+        box-shadow var(--transition);
+}
+
+.cust-primary-btn {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: var(--on-accent);
+    box-shadow: 0 6px 16px var(--accent-glow-soft, rgba(255, 184, 108, 0.25));
+}
+.cust-primary-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px var(--accent-glow-strong, rgba(255, 184, 108, 0.4));
+}
+
+.cust-ghost-btn {
+    background: transparent;
+    color: var(--text-muted);
+}
+.cust-ghost-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+/* ============== LIVE PREVIEW ============== */
+.cust-preview {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    padding: 14px;
+}
+
+.cust-preview-window {
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg);
+    border: 1px solid var(--border);
+}
+
+.cust-preview-topbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+}
+.cust-preview-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.cust-preview-dot.dot-r {
+    background: #ff6b6b;
+}
+.cust-preview-dot.dot-y {
+    background: #ffd166;
+}
+.cust-preview-dot.dot-g {
+    background: #59d77e;
+}
+.cust-preview-title {
+    margin-left: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.cust-preview-body {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    min-height: 180px;
+}
+
+.cust-preview-side {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.cust-preview-nav {
+    padding: 8px 10px;
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+.cust-preview-nav.active {
+    color: var(--accent);
+    background: rgba(255, 184, 108, 0.08);
+}
+
+.cust-preview-main {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 12px;
+    padding: 14px;
+    background: var(--bg);
+}
+
+.cust-preview-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    color: var(--text);
+}
+.cust-preview-card h4 {
+    margin: 8px 0 4px;
+    font-size: 18px;
+    font-weight: 700;
+}
+.cust-preview-card p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.cust-preview-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--on-accent);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+}
+
+.cust-preview-cta {
+    margin-top: 10px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: var(--on-accent);
+}
+
+.cust-preview-card.alt {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.cust-preview-muted {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+.cust-preview-bar {
+    height: 8px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+}
+.cust-preview-bar span {
+    display: block;
+    width: 64%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+}
+
+@media (max-width: 720px) {
+    .cust-preview-body {
+        grid-template-columns: 1fr;
+    }
+    .cust-preview-side {
+        display: none;
+    }
+    .cust-preview-main {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ============== SECTIONS ============== */
+.cust-section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+}
+
+.cust-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.cust-section-head h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.cust-section-hint {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+/* ============== PRESETS ============== */
+.cust-presets {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.cust-preset-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition:
+        transform var(--transition),
+        border-color var(--transition);
+}
+.cust-preset-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+}
+.cust-preset-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow-soft, rgba(255, 184, 108, 0.25));
+}
+
+.cust-preset-strip {
+    display: flex;
+    gap: 4px;
+    height: 28px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.cust-preset-strip span {
+    flex: 1;
+}
+
+.cust-preset-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+.cust-preset-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+/* ============== COLOR CARDS ============== */
+.cust-color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+}
+
+.cust-color-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition:
+        border-color var(--transition),
+        transform var(--transition);
+}
+.cust-color-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.cust-color-swatch {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.04);
+    background: #000; /* updated via JS */
+}
+
+.cust-color-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.cust-color-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+.cust-color-hex {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Hide native color picker visually, keep clickable */
+.cust-color-card input[type="color"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+}
+
+/* ============== ADVANCED GRID (auto-styled by customization.js) ============
+   The original main.js fills this grid with raw <label> elements containing
+   <input type="color"> (and sometimes a `.rgba-editor` wrapper for rgba vars).
+   The enhancer in customization.js wraps each label so it renders as a card
+   identical in shape to .cust-color-card above. The classes below style that
+   enhanced markup. If the enhancer hasn't run yet, the fallback rules at the
+   bottom keep the raw labels readable.
+   ========================================================================== */
+.cust-advanced-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+.cust-advanced-grid:empty {
+    display: none;
+}
+
+/* Enhanced label: same look as .cust-color-card */
+.cust-advanced-grid > label.cust-adv-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition:
+        border-color var(--transition),
+        transform var(--transition);
+    min-height: 60px;
+}
+.cust-advanced-grid > label.cust-adv-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+/* The "checkered" swatch — supports both solid colors and rgba (alpha shows through) */
+.cust-adv-card .cust-adv-swatch {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    background-image:
+        linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.06) 75%);
+    background-size: 10px 10px;
+    background-position:
+        0 0,
+        0 5px,
+        5px -5px,
+        -5px 0;
+}
+.cust-adv-card .cust-adv-swatch::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--swatch-color, transparent);
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.04);
+}
+
+.cust-adv-card .cust-adv-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+.cust-adv-card .cust-adv-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cust-adv-card .cust-adv-hex {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The native <input type="color"> covers the card and is invisible — clicking
+   anywhere on the card opens the picker, identical to .cust-color-card. */
+.cust-adv-card > input[type="color"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    z-index: 1;
+}
+
+/* RGBA variant: alpha slider lives on a second row so the card stays clickable
+   for the picker, but the slider doesn't get covered. */
+.cust-adv-card.has-rgba {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    padding-bottom: 10px;
+}
+.cust-adv-card .rgba-editor {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 6px;
+    z-index: 2; /* sit above the invisible color input */
+    position: relative;
+}
+.cust-adv-card .rgba-editor > input[type="color"] {
+    /* Hide — the swatch + the absolutely-positioned color input above already
+       represent it. */
+    display: none;
+}
+.cust-adv-card .rgba-editor > input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+.cust-adv-card .rgba-editor > span {
+    min-width: 36px;
+    text-align: right;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+.cust-adv-card .rgba-editor > input[type="hidden"] {
+    display: none;
+}
+
+/* Fallback for the tiny window before the enhancer runs (or if it fails):
+   raw <label>...<input type="color"></label> still looks tidy. */
+.cust-advanced-grid > label:not(.cust-adv-card) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: capitalize;
+}
+.cust-advanced-grid > label:not(.cust-adv-card) > input[type="color"] {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    margin-left: auto;
+}
+
+/* ============== METADATA ROW ============== */
+.cust-meta-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+}
+
+.cust-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.cust-input-wrap > i {
+    position: absolute;
+    left: 12px;
+    color: var(--text-dim);
+    font-size: 13px;
+    pointer-events: none;
+}
+.cust-input {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px 0 36px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 13px;
+    transition: border-color var(--transition);
+}
+.cust-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* ============== SAVED THEMES ============== */
+.cust-saved-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+}
+.cust-saved-list:empty::before {
+    content: "Сохранённых тем пока нет";
+    color: var(--text-dim);
+    font-size: 13px;
+    grid-column: 1 / -1;
+    padding: 14px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+}
+
+.cust-saved-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    transition:
+        border-color var(--transition),
+        transform var(--transition);
+}
+.cust-saved-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+}
+
+.cust-saved-strip {
+    display: flex;
+    gap: 4px;
+    height: 24px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.cust-saved-strip span {
+    flex: 1;
+}
+
+.cust-saved-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    word-break: break-word;
+}
+
+.cust-saved-actions {
+    display: flex;
+    gap: 6px;
+}
+.cust-saved-actions button {
+    flex: 1;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        color var(--transition),
+        border-color var(--transition),
+        background var(--transition);
+}
+.cust-saved-actions button:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+.cust-saved-actions .cust-apply-btn {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: var(--on-accent);
+    border-color: transparent;
+}
+.cust-saved-actions .cust-apply-btn:hover {
+    color: var(--on-accent);
+    filter: brightness(1.05);
+}
+.cust-saved-actions .cust-delete-btn {
+    color: #ff8b8b;
+}
+.cust-saved-actions .cust-delete-btn:hover {
+    color: #fff;
+    background: #b13a3a;
+    border-color: #b13a3a;
+}

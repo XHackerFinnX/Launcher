@@ -1879,6 +1879,74 @@ input:checked + .slider:before {
     border-color: var(--accent);
 }
 
+.network-grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr 1fr 1fr repeat(6, auto);
+    gap: 8px;
+    align-items: center;
+}
+
+.network-room-panel {
+    margin-top: 18px;
+    border: 1px solid var(--border);
+}
+
+.network-room-title {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.network-room-status {
+    margin-top: 8px;
+    color: var(--text-dim);
+}
+
+.network-room-peers {
+    margin-top: 10px;
+}
+
+.network-grid input {
+    height: 36px;
+    border-radius: 8px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-dark);
+    color: var(--text);
+}
+
+.network-grid button {
+    height: 36px;
+    border-radius: 8px;
+}
+
+.network-signal {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 14px;
+}
+
+.network-signal span {
+    width: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.network-signal span:nth-child(1) {
+    height: 6px;
+}
+.network-signal span:nth-child(2) {
+    height: 10px;
+}
+.network-signal span:nth-child(3) {
+    height: 14px;
+}
+
+.network-signal span.on {
+    background: #59d77e;
+}
+
 /* ============================================
    Bottom Play Bar
    ============================================ */
