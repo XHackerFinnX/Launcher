@@ -316,6 +316,57 @@ def set_local_minecraft_port(room_id: str = "", port: int = 0):
 
     return {"ok": True, "room_id": room, "minecraft_port": port, "public_ip": public_ip}
 
+
+
+
+@eel.expose
+def get_my_public_ip():
+    ip = _detect_public_ip()
+    if not ip:
+        return {"ok": False, "error": "public_ip_not_detected"}
+    cfg = _load_network_config()
+    cfg["last_public_ip"] = ip
+    _save_network_config(cfg)
+    return {"ok": True, "ip": ip}
+@eel.expose
+def get_my_lan_ip():
+    return {"ok": True, "ip": _detect_local_ip()}
+
+
+@eel.expose
+def check_external_port(ip: str = "", port: int = 0):
+    ip = str(ip or "").strip()
+    try:
+        port = int(port)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "invalid_port"}
+    if not ip:
+        return {"ok": False, "error": "ip_empty"}
+    if port < 1 or port > 65535:
+        return {"ok": False, "error": "port_out_of_range"}
+
+    # External checker (public internet vantage point)
+    try:
+        resp = requests.post(
+            "https://ports.yougetsignal.com/check-port.php",
+            data={"remoteAddress": ip, "portNumber": str(port)},
+            timeout=(5, 12),
+            headers={"User-Agent": "StoneLauncher/1.0"},
+        )
+        data = resp.json() if resp.content else {}
+        status = str(data.get("status", "")).lower()
+        open_flag = str(data.get("portStatus", "")).lower() == "open" or status == "open"
+        return {
+            "ok": True,
+            "ip": ip,
+            "port": port,
+            "is_open": bool(open_flag),
+            "source": "yougetsignal",
+            "raw": data,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"external_check_failed: {exc}"}
+
 @eel.expose
 def get_connection_plan(room_id=""):
     probe = test_room_connection(room_id)

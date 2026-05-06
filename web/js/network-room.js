@@ -1,5 +1,5 @@
 /* ==========================================================================
-   StoneLauncher · Network Room redesign · controller
+   SLauncher · Network Room redesign · controller
    Replaces the old `initNetworkPanel` IIFE (which built the panel inline in
    JS). This version:
      - reads from the static HTML partial
@@ -112,6 +112,7 @@
         currentRoomId: "",
         joined: false,
         autoRefreshTimer: null,
+        preferLanRoute: false,
     };
 
     /* ------------------------------------------------------------------ */
@@ -131,6 +132,7 @@
                 const userId = p?.user_id || p?.id || "";
                 const ping = p?.ping_ms ?? p?.ping;
                 const ip = p?.public_ip || p?.ip || p?.address || "—";
+                const lanIp = p?.lan_ip || "";
                 const port = p?.minecraft_port || p?.port || p?.lan_port || "";
                 const isHost = !!(p?.is_host || p?.host);
                 const isMe =
@@ -156,8 +158,9 @@
                 if (isMe)
                     tags.push(`<span class="net-peer-tag tag-me">Вы</span>`);
 
-                const ipPort = port ? `${ip}:${port}` : ip;
-                const canConnect = !!port && ip && ip !== "—";
+                const preferredIp = state.preferLanRoute && lanIp ? lanIp : ip;
+                const ipPort = port ? `${preferredIp}:${port}` : preferredIp;
+                const canConnect = !!port && preferredIp && preferredIp !== "—";
 
                 return `
                 <article class="net-peer-card ${isMe ? "is-me" : ""} ${isHost ? "is-host" : ""}">
@@ -192,7 +195,7 @@
                     <div class="net-peer-actions">
                         <button class="net-btn net-btn-primary" data-copy="${escapeAttr(ipPort)}"
                                 ${canConnect ? "" : "disabled"}>
-                            <i class="fas fa-plug"></i> Скопировать IP:порт
+                            <i class="fas fa-plug"></i> Скопировать маршрут
                         </button>
                     </div>
                 </article>
@@ -252,6 +255,11 @@
             state.currentRoomId = cfg.active_room;
             updatePill("connected", `Комната: ${cfg.active_room}`);
         }
+    }
+
+    async function loadMyLanIp() {
+        const res = await eelCall("get_my_lan_ip");
+        if (res?.ok && res.ip) setText($("net-my-lan-ip"), res.ip);
     }
 
     async function loadMyIp() {
@@ -443,6 +451,63 @@
         await refreshPeers();
     }
 
+    async function checkExternalPort() {
+        const statusEl = $("net-port-check-status");
+        const ip = $("net-my-ip")?.textContent?.trim();
+        const port = Number($("net-my-port")?.value || state.myPort || 0);
+        if (!ip || ip === "—") {
+            if (statusEl) {
+                statusEl.textContent = "сначала получи public IP";
+                statusEl.dataset.state = "warn";
+            }
+            return;
+        }
+        if (!port) {
+            if (statusEl) {
+                statusEl.textContent = "введи порт";
+                statusEl.dataset.state = "warn";
+            }
+            return;
+        }
+        if (statusEl) {
+            statusEl.textContent = "проверка...";
+            statusEl.dataset.state = "warn";
+        }
+        const res = await eelCall("check_external_port", ip, port);
+        if (!res?.ok) {
+            if (statusEl) {
+                statusEl.textContent = "ошибка проверки";
+                statusEl.dataset.state = "warn";
+            }
+            return;
+        }
+        if (statusEl) {
+            statusEl.textContent = res.is_open ? "да" : "нет";
+            statusEl.dataset.state = res.is_open ? "ok" : "fail";
+        }
+
+        if (res.is_open) {
+            state.preferLanRoute = false;
+            setStatus(
+                $("network-status"),
+                `Порт ${port} открыт извне: direct-подключение должно работать.`,
+                "success",
+            );
+        } else {
+            state.preferLanRoute = true;
+            setStatus(
+                $("network-status"),
+                `Похоже CGNAT/порт закрыт — включён VPN-режим маршрута (LAN/VPN IP).`,
+                "error",
+            );
+            safeToast({
+                title: "Сеть",
+                message: "Авто-переключение на VPN/LAN маршрут включено",
+                type: "info",
+            });
+        }
+    }
+
     async function testConnection() {
         const status = $("network-status");
         if (!state.currentRoomId) {
@@ -538,6 +603,7 @@
         $("network-refresh-btn")?.addEventListener("click", refreshPeers);
         $("network-connect-btn")?.addEventListener("click", testConnection);
         $("network-auto-btn")?.addEventListener("click", autoRoute);
+        $("net-check-port")?.addEventListener("click", checkExternalPort);
         $("net-publish-port")?.addEventListener("click", publishPort);
 
         // Copy buttons in the "my status" card
@@ -572,6 +638,7 @@
         bind();
         await loadConfig();
         await loadMyIp();
+        await loadMyLanIp();
         // Pre-render empty list so the empty-state styling shows
         renderPeers([]);
         if (state.currentRoomId) {

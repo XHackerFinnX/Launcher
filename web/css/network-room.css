@@ -692,3 +692,20 @@
     background: rgba(255, 184, 108, 0.08);
     border-color: rgba(255, 184, 108, 0.3);
 }
+
+#net-port-check-status[data-state="ok"] {
+    color: var(--success);
+    font-weight: 700;
+}
+#net-port-check-status[data-state="fail"] {
+    color: var(--danger);
+    font-weight: 700;
+}
+#net-port-check-status[data-state="warn"] {
+    color: var(--accent);
+    font-weight: 700;
+}
+.net-port-check-row .net-btn {
+    padding: 0 10px;
+    height: 34px;
+}

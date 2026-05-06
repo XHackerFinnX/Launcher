@@ -385,9 +385,7 @@
 
                 <section class="content-section" id="network">
                     <div class="section-header">
-                        <h2>
-                            Игра по сети
-                        </h2>
+                        <h2>Игра по сети</h2>
                         <p class="page-subtitle">
                             Своя комната как в Hamachi/Radmin — создавай,
                             подключайся и заходи в LAN-мир Minecraft по
@@ -514,6 +512,25 @@
                                             <i class="fas fa-copy"></i>
                                         </button>
                                     </div>
+
+                                    <div class="net-me-row">
+                                        <span class="net-me-label"
+                                            >LAN/VPN IP</span
+                                        >
+                                        <span
+                                            class="net-me-value"
+                                            id="net-my-lan-ip"
+                                            >—</span
+                                        >
+                                        <button
+                                            class="net-copy-btn"
+                                            data-copy-target="net-my-lan-ip"
+                                            title="Скопировать"
+                                        >
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+
                                     <div class="net-me-row">
                                         <span class="net-me-label"
                                             >LAN порт Minecraft</span
@@ -534,6 +551,25 @@
                                             Опубликовать
                                         </button>
                                     </div>
+
+                                    <div class="net-me-row net-port-check-row">
+                                        <span class="net-me-label"
+                                            >Порт открыт извне</span
+                                        >
+                                        <span
+                                            class="net-me-value"
+                                            id="net-port-check-status"
+                                            >не проверено</span
+                                        >
+                                        <button
+                                            class="net-btn net-btn-ghost"
+                                            id="net-check-port"
+                                        >
+                                            <i class="fas fa-shield-halved"></i>
+                                            Проверить
+                                        </button>
+                                    </div>
+
                                     <p class="net-me-hint">
                                         Открой мир: <kbd>Esc</kbd> &rarr;
                                         &laquo;Открыть для сети&raquo; &rarr;
@@ -1282,8 +1318,7 @@
                                 <div
                                     class="theme-grid cust-advanced-grid"
                                     id="theme-advanced-grid"
-                                >
-                                </div>
+                                ></div>
                             </section>
 
                             <!-- ============== METADATA ============== -->
@@ -1438,8 +1473,8 @@
             <div class="modal-content">
                 <h2>Доступно обновление</h2>
                 <p>
-                    Вышла новая версия SLauncher с улучшениями и
-                    исправлениями. Обновить сейчас?
+                    Вышла новая версия SLauncher с улучшениями и исправлениями.
+                    Обновить сейчас?
                 </p>
                 <button id="updateButton">
                     <i class="fas fa-download"></i>
@@ -1590,10 +1625,7 @@
                     return new Date(year, month - 1, day);
                 }
             } catch (e) {
-                console.warn(
-                    "[SLauncher] sum_time_last_date недоступно",
-                    e,
-                );
+                console.warn("[SLauncher] sum_time_last_date недоступно", e);
             }
         </script>
     </body>
