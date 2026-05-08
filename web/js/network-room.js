@@ -558,7 +558,7 @@
         if (!res?.ok) {
             setStatus(
                 status,
-                `Нет маршрута: ${res?.error || "unknown"}`,
+                `Нет маршрута: ${res?.error === "relay_not_supported" ? "backend не поддерживает relay endpointы" : res?.hint || res?.error || "unknown"}${res?.next_actions?.[0] ? " | " + res.next_actions[0] : ""}`,
                 "error",
             );
             return;
@@ -569,14 +569,76 @@
                 `Direct: хост ${res.endpoint?.address || ""} доступен напрямую.`,
                 "success",
             );
-        } else {
-            const turnCount = (res.turn?.urls || []).length;
+        } else if (res.mode === "relay_tcp") {
             setStatus(
                 status,
-                `Relay: direct недоступен, использую TURN (${turnCount} серв.)`,
+                `Relay маршрут готов: ${res.endpoint?.address || ""}.`,
+                "success",
+            );
+        } else {
+            setStatus(
+                status,
+                `Relay недоступен для Minecraft TCP в лаунчере. ${res?.hint || "Используйте VPN/туннель."}`,
                 "working",
             );
         }
+    }
+
+    async function startRelayHost() {
+        const status = $("network-status");
+        if (!state.currentRoomId) {
+            setStatus(
+                status,
+                "Сначала создай или подключись к комнате",
+                "error",
+            );
+            return;
+        }
+        const mcPort = parseInt($("net-my-port")?.value || "25565", 10);
+        setStatus(status, "Запускаем tunnel-agent хоста...", "working");
+        const res = await eelCall(
+            "start_tunnel_agent",
+            state.currentRoomId,
+            mcPort,
+        );
+        if (!res?.ok) {
+            if (res?.error === "relay_not_supported") {
+                setStatus(
+                    status,
+                    "Relay endpoint не реализован на backend (POST /rooms/{room}/relay/session/open).",
+                    "error",
+                );
+                return;
+            }
+            setStatus(
+                status,
+                `Не удалось запустить relay: ${res?.error || "unknown"}`,
+                "error",
+            );
+            return;
+        }
+        setStatus(
+            status,
+            `Relay запущен: ${res?.relay?.host || ""}:${res?.relay?.port || ""}`,
+            "success",
+        );
+    }
+
+    async function stopRelayHost() {
+        const status = $("network-status");
+        const res = await eelCall(
+            "stop_tunnel_agent",
+            state.currentRoomId || "",
+        );
+        if (!res?.ok) {
+            setStatus(
+                status,
+                `Ошибка остановки relay: ${res?.error || "unknown"}`,
+                "error",
+            );
+            return;
+        }
+        setStatus(status, "Relay остановлен", "working");
     }
 
     function startAutoRefresh() {
@@ -603,6 +665,8 @@
         $("network-refresh-btn")?.addEventListener("click", refreshPeers);
         $("network-connect-btn")?.addEventListener("click", testConnection);
         $("network-auto-btn")?.addEventListener("click", autoRoute);
+        $("network-relay-start-btn")?.addEventListener("click", startRelayHost);
+        $("network-relay-stop-btn")?.addEventListener("click", stopRelayHost);
         $("net-check-port")?.addEventListener("click", checkExternalPort);
         $("net-publish-port")?.addEventListener("click", publishPort);
 

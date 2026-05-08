@@ -18,6 +18,7 @@ import urllib.request
 from typing import Any, Callable, Dict, Optional
 
 from db.database import create_connection
+from db.tunnel_agent import TunnelAgent, RelayClientProxy, relay_smoke_test
 from utils.config import minecraft_directory, VERSIONS_LAUNCHER
 from utils.validators import is_valid_login, is_valid_server_address
 
@@ -28,7 +29,9 @@ FILE_INTEGRITY_MANIFEST_URL = "https://raw.githubusercontent.com/XHackerFinnX/SL
 logger = logging.getLogger(__name__)
 _log_viewer_process = None
 NETWORK_CONFIG_PATH = Path(r"C:\.stoneworld\db\network.json")
-
+_TUNNEL_AGENTS: Dict[str, TunnelAgent] = {}
+_RELAY_UNSUPPORTED_CACHE: Dict[str, float] = {}
+_RELAY_CLIENT_PROXIES: Dict[str, RelayClientProxy] = {}
 
 def _load_network_config():
     defaults = {
@@ -83,6 +86,25 @@ def _api_request_first_success(candidates):
         return res
     return {"ok": False, "error": last_error}
 
+def _relay_room_request(room: str, action: str, payload=None):
+    """Try known relay endpoint variants; cache 404 to avoid log spam."""
+    cfg = _load_network_config()
+    api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+    cache_key = f"{api_prefix}:{room}:{action}"
+    until = _RELAY_UNSUPPORTED_CACHE.get(cache_key, 0)
+    if until and time.time() < until:
+        return {"ok": False, "error": "relay_not_supported"}
+
+    candidates = [
+        ("POST", f"{api_prefix}/rooms/{room}/relay/session/{action}", payload),
+        ("POST", f"/chat/rooms/{room}/relay/session/{action}", payload),
+        ("POST", f"{api_prefix}/rooms/{room}/relay/{action}", payload),
+    ]
+    res = _api_request_first_success(candidates)
+    if str(res.get("error","")).startswith("http_404"):
+        _RELAY_UNSUPPORTED_CACHE[cache_key] = time.time() + 300
+        return {"ok": False, "error": "relay_not_supported"}
+    return res
 
 def _detect_local_ip():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -375,19 +397,130 @@ def get_connection_plan(room_id=""):
     if probe.get("reachable"):
         return {"ok": True, "mode": "direct", "endpoint": probe.get("endpoint")}
     turn = get_turn_credentials()
-    if turn.get("ok"):
+    api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+    cfg = _load_network_config()
+    join_payload = {"user_id": str(cfg.get("user_id") or "").strip()}
+    relay_join = _relay_room_request(room_id, "join", payload=join_payload) if room_id else {"ok": False, "error": "room_empty"}
+    if relay_join.get("ok"):
+        r = relay_join.get("data") or {}
+        room_key = str(room_id)
+        old_proxy = _RELAY_CLIENT_PROXIES.get(room_key)
+        if old_proxy:
+            old_proxy.stop()
+        local_port = 25595
+        proxy = RelayClientProxy(
+            relay_host=str(r.get("relay_host") or ""),
+            relay_port=int(r.get("relay_port") or 0),
+            room_id=room_key,
+            join_token=str(r.get("join_token") or ""),
+            local_port=local_port,
+        )
+        proxy.start()
+        _RELAY_CLIENT_PROXIES[room_key] = proxy
         return {
             "ok": True,
-            "mode": "relay",
-            "endpoint": probe.get("endpoint"),
-            "turn": turn.get("turn"),
+            "mode": "relay_tcp",
+            "endpoint": {
+                "host": "127.0.0.1",
+                "port": local_port,
+                "address": f"127.0.0.1:{local_port}",
+            },
+            "relay_endpoint": {
+                "host": r.get("relay_host"),
+                "port": r.get("relay_port"),
+                "address": f"{r.get('relay_host')}:{r.get('relay_port')}",
+            },
+            "join_token": r.get("join_token"),
+            "hint": "Direct недоступен, запущен локальный relay proxy 127.0.0.1.",
         }
     return {
         "ok": False,
-        "error": "no_direct_no_relay",
+        "error": "direct_unreachable_no_tcp_relay",
         "endpoint": probe.get("endpoint"),
+        "turn_available": bool(turn.get("ok")),
         "turn_error": turn.get("error"),
+        "relay_error": relay_join.get("error"),
+        "hint": "Нужен VPN/туннель (WireGuard/Radmin/Hamachi/playit.gg) или встроенный TCP relay.",
+        "next_actions": [
+            "См. docs/network-tunnel-integration.md для внедрения собственного tunnel-agent + relay server",
+        ],
     }
+    
+@eel.expose
+def relay_server_smoke_test(relay_host="", relay_port=0):
+    host = str(relay_host or "").strip()
+    try:
+        port = int(relay_port)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "invalid_port"}
+    if not host or port < 1:
+        return {"ok": False, "error": "invalid_host_or_port"}
+    return relay_smoke_test(host, port)
+
+
+@eel.expose
+def start_tunnel_agent(room_id="", minecraft_port=0):
+    cfg = _load_network_config()
+    room = str(room_id or cfg.get("active_room") or "").strip()
+    if not room:
+        return {"ok": False, "error": "room_empty"}
+    try:
+        mc_port = int(minecraft_port)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "invalid_minecraft_port"}
+    if mc_port < 1 or mc_port > 65535:
+        return {"ok": False, "error": "minecraft_port_out_of_range"}
+
+    payload = {
+        "user_id": str(cfg.get("user_id") or "").strip(),
+        "minecraft_port": mc_port,
+    }
+    res = _relay_room_request(room, "open", payload=payload)
+    if not res.get("ok"):
+        return res
+    data = res.get("data") or {}
+    relay_host = str(data.get("relay_host") or "").strip()
+    relay_port = int(data.get("relay_port") or 0)
+    agent_token = str(data.get("agent_token") or "").strip()
+    if not (relay_host and relay_port and agent_token):
+        return {"ok": False, "error": "relay_open_response_invalid", "data": data}
+
+    old = _TUNNEL_AGENTS.get(room)
+    if old:
+        old.stop()
+
+    agent = TunnelAgent(relay_host=relay_host, relay_port=relay_port, agent_token=agent_token, minecraft_port=mc_port, room_id=room)
+    agent.start()
+    _TUNNEL_AGENTS[room] = agent
+    return {"ok": True, "room_id": room, "status": agent.status(), "relay": {"host": relay_host, "port": relay_port}}
+
+
+@eel.expose
+def stop_tunnel_agent(room_id=""):
+    cfg = _load_network_config()
+    room = str(room_id or cfg.get("active_room") or "").strip()
+    agent = _TUNNEL_AGENTS.get(room)
+    if not agent:
+        return {"ok": True, "room_id": room, "status": "not_running"}
+    agent.stop()
+    _TUNNEL_AGENTS.pop(room, None)
+    proxy = _RELAY_CLIENT_PROXIES.get(room)
+    if proxy:
+        proxy.stop()
+        _RELAY_CLIENT_PROXIES.pop(room, None)
+    cfg = _load_network_config()
+    _relay_room_request(room, "close", payload={"user_id": str(cfg.get("user_id") or "").strip()})
+    return {"ok": True, "room_id": room, "status": "stopped"}
+
+
+@eel.expose
+def get_tunnel_agent_status(room_id=""):
+    cfg = _load_network_config()
+    room = str(room_id or cfg.get("active_room") or "").strip()
+    agent = _TUNNEL_AGENTS.get(room)
+    if not agent:
+        return {"ok": True, "room_id": room, "running": False, "status": "idle"}
+    return {"ok": True, "room_id": room, "running": True, **agent.status()}
 
 def _download_file_to_target(url: str, target_path: Path) -> None:
     target_path.parent.mkdir(parents=True, exist_ok=True)
