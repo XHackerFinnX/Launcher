@@ -1291,6 +1291,20 @@ function createVersionCard(version, options = {}) {
 
     actions.appendChild(downloadBtn);
 
+    if (type) {
+        // только для сборок (не ванильных версий)
+        const settingsBtn = document.createElement("button");
+        settingsBtn.className = "settings-modpack-btn";
+        settingsBtn.innerHTML = '<i class="fas fa-gear"></i>';
+        settingsBtn.style.display = isInstalled ? "flex" : "none";
+        settingsBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            // Открыть модальное окно в режиме управления
+            openModpackManageModal(version, type);
+        });
+        actions.appendChild(settingsBtn);
+    }
+
     body.appendChild(title);
     body.appendChild(actions);
 
@@ -2590,18 +2604,53 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 });
 
-// ---------- Modpack creator ----------
+function openModpackManageModal(version, type) {
+    // Получаем данные сборки (можно из БД через eel)
+    // Для примера передаём базовые данные
+    const modpackData = {
+        id: version, // идентификатор сборки
+        name: version,
+        desc: "",
+        version: version,
+        loader: type, // forge / fabric / modpack
+    };
+    openModpackModal("manage", modpackData);
+}
+
+// ---------- Modpack creator (улучшенный) ----------
 document.addEventListener("DOMContentLoaded", () => {
     const modal = document.getElementById("modpack-modal");
     const openBtn = document.getElementById("open-modpack-creator");
     const closeBtn = document.getElementById("close-modpack-modal");
+    const modeInput = document.getElementById("modpack-mode");
+    const editIdInput = document.getElementById("modpack-edit-id");
+    const modalTitle = document.getElementById("modpack-modal-title");
+    const modalSubtitle = document.getElementById("modpack-modal-subtitle");
+    const saveRow = document.getElementById("modpack-save-row");
+    const saveBtn = document.getElementById("modpack-save-btn");
+
+    const versionSelect = document.getElementById("modpack-version");
+    const loaderSelect = document.getElementById("modpack-loader");
+    const nameInput = document.getElementById("modpack-name");
+    const descInput = document.getElementById("modpack-description");
+
     const prepareBtn = document.getElementById("prepare-modpack");
-    const results = document.getElementById("mods-results");
-    const search = document.getElementById("mod-search");
+    const resultsEl = document.getElementById("mods-results");
+    const searchInput = document.getElementById("mod-search");
     const installedList = document.getElementById("installed-mods-list");
+
     let provider = "modrinth";
-    openBtn?.addEventListener("click", () => modal?.classList.remove("hidden"));
-    closeBtn?.addEventListener("click", () => modal?.classList.add("hidden"));
+
+    // ---------- Открыть модальное окно (режим создания) ----------
+    openBtn?.addEventListener("click", () => openModpackModal("create"));
+    closeBtn?.addEventListener("click", closeModpackModal);
+
+    // Закрытие по клику вне карточки
+    modal?.addEventListener("click", (e) => {
+        if (e.target === modal) closeModpackModal();
+    });
+
+    // Переключение провайдеров
     document.querySelectorAll("[data-provider]").forEach((b) =>
         b.addEventListener("click", () => {
             provider = b.dataset.provider;
@@ -2609,334 +2658,326 @@ document.addEventListener("DOMContentLoaded", () => {
                 .querySelectorAll("[data-provider]")
                 .forEach((x) => x.classList.remove("active"));
             b.classList.add("active");
-            loadMods();
+            loadAvailableMods();
         }),
     );
 
-    async function loadInstalled() {
-        const version = document
-            .getElementById("modpack-version")
-            ?.value?.trim();
-        if (!version) return;
-        try {
-            const list = await eel.list_installed_mods(version)();
-            installedList.innerHTML =
-                list
-                    .map(
-                        (m) =>
-                            `<div class="update-item"><b>${m.name}</b> <span>${(m.size / 1024 / 1024).toFixed(2)} MB</span></div>`,
-                    )
-                    .join("") || '<div class="update-item">Пока пусто</div>';
-        } catch (e) {}
-    }
+    // Поиск модов
+    searchInput?.addEventListener("input", debounce(loadAvailableMods, 300));
 
-    async function loadMods() {
-        const version = document
-            .getElementById("modpack-version")
-            ?.value?.trim();
-        const loader = document.getElementById("modpack-loader")?.value;
-        if (!version || !loader) return;
-        results.innerHTML = '<div class="update-item">Загрузка...</div>';
-        try {
-            const mods = await eel.search_mods(
-                provider,
-                search.value,
-                version,
-                loader,
-                20,
-                "downloads",
-            )();
-            results.innerHTML =
-                mods
-                    .map(
-                        (m) =>
-                            `<div class="update-item"><img src="${m.icon || ""}" style="width:36px;height:36px;border-radius:8px;object-fit:cover;margin-right:8px;"/><div><b>${m.title}</b><div>${m.description || ""}</div></div><button class="btn-secondary install-mod-btn" data-id="${m.project_id}">Установить</button></div>`,
-                    )
-                    .join("") ||
-                '<div class="update-item">Ничего не найдено</div>';
-            results.querySelectorAll(".install-mod-btn").forEach((btn) =>
-                btn.addEventListener("click", async () => {
-                    btn.textContent = "Скачивание...";
-                    const res = await eel.install_mod(
-                        provider,
-                        btn.dataset.id,
-                        version,
-                        version,
-                        loader,
-                    )();
-                    btn.textContent = res.ok ? "Установлено" : "Ошибка";
-                    await loadInstalled();
-                }),
-            );
-        } catch (e) {
-            results.innerHTML =
-                '<div class="update-item">Ошибка загрузки каталога модов</div>';
+    // Выбор версии → обновление загрузчиков
+    versionSelect?.addEventListener("change", onVersionChange);
+
+    // Сохранить сборку
+    saveBtn?.addEventListener("click", saveModpack);
+
+    // Установить базу
+    prepareBtn?.addEventListener("click", installBaseVersion);
+
+    // ---------- Функции ----------
+    function openModpackModal(mode, modpackData = null) {
+        if (!modal) return;
+        modal.classList.remove("hidden");
+        modeInput.value = mode;
+
+        if (mode === "create") {
+            modalTitle.textContent = "Создать сборку";
+            modalSubtitle.textContent = "Выберите версию, загрузчик и моды";
+            nameInput.value = "";
+            descInput.value = "";
+            versionSelect.value = "";
+            loaderSelect.innerHTML =
+                '<option value="">Сначала выберите версию</option>';
+            saveRow.style.display = "flex";
+            editIdInput.value = "";
+            enableFields(true);
+        } else if (mode === "manage" && modpackData) {
+            modalTitle.textContent = "Управление сборкой";
+            modalSubtitle.textContent = modpackData.name || "Сборка";
+            nameInput.value = modpackData.name || "";
+            descInput.value = modpackData.desc || "";
+            versionSelect.value = modpackData.version || "";
+            editIdInput.value = modpackData.id || "";
+            saveRow.style.display = "none";
+            enableFields(false);
+            // Установить загрузчик
+            populateLoadersForVersion(modpackData.version).then(() => {
+                loaderSelect.value = modpackData.loader || "";
+            });
+            loadInstalledMods();
+        }
+
+        // Заполнить список версий при первом открытии
+        if (versionSelect.options.length <= 1) {
+            populateVersionSelect();
         }
     }
-    prepareBtn?.addEventListener("click", async () => {
-        const version = document
-            .getElementById("modpack-version")
-            ?.value?.trim();
-        const loader = document.getElementById("modpack-loader")?.value;
-        if (!version) return;
+
+    function closeModpackModal() {
+        modal?.classList.add("hidden");
+    }
+
+    function enableFields(enabled) {
+        nameInput.disabled = !enabled;
+        descInput.disabled = !enabled;
+        versionSelect.disabled = !enabled;
+        loaderSelect.disabled = !enabled;
+        prepareBtn.style.display = enabled ? "" : "none";
+    }
+
+    async function populateVersionSelect() {
+        try {
+            const online = await eel.get_online_minecraft_versions(120)();
+            const releases = online?.releases || [];
+            versionSelect.innerHTML =
+                '<option value="">Выберите версию</option>';
+            releases.forEach((v) => {
+                const opt = document.createElement("option");
+                opt.value = v;
+                opt.textContent = v;
+                versionSelect.appendChild(opt);
+            });
+        } catch (e) {
+            console.warn("Не удалось загрузить список версий", e);
+        }
+    }
+
+    async function onVersionChange() {
+        const version = versionSelect.value;
+        if (!version) {
+            loaderSelect.innerHTML =
+                '<option value="">Сначала выберите версию</option>';
+            return;
+        }
+        await populateLoadersForVersion(version);
+        loadAvailableMods();
+        if (modeInput.value === "manage") loadInstalledMods();
+    }
+
+    async function populateLoadersForVersion(version) {
+        loaderSelect.innerHTML = '<option value="">Загрузка...</option>';
+        try {
+            const loaders = await eel.get_available_loaders(version)();
+            loaderSelect.innerHTML =
+                '<option value="">Выберите загрузчик</option>';
+            if (loaders && loaders.length) {
+                loaders.forEach((loader) => {
+                    const opt = document.createElement("option");
+                    opt.value = loader;
+                    opt.textContent =
+                        loader.charAt(0).toUpperCase() + loader.slice(1);
+                    loaderSelect.appendChild(opt);
+                });
+            } else {
+                loaderSelect.innerHTML =
+                    '<option value="">Нет доступных загрузчиков</option>';
+            }
+        } catch (e) {
+            loaderSelect.innerHTML =
+                '<option value="">Ошибка загрузки</option>';
+            console.warn("get_available_loaders error", e);
+        }
+    }
+
+    async function installBaseVersion() {
+        const version = versionSelect.value;
+        const loader = loaderSelect.value;
+        if (!version || !loader) {
+            toast({ title: "Выберите версию и загрузчик", type: "error" });
+            return;
+        }
         const build = `${version}-${loader}`;
         prepareBtn.innerHTML =
             '<i class="fas fa-spinner fa-spin"></i> Установка...';
         try {
             await eel.minecraft_download_version_build(build)();
+            await eel.insert_version(build)();
+            updateVersionGrid(); // обновить основную сетку
             toast({
                 title: "Базовая сборка установлена",
                 message: build,
                 type: "success",
             });
-            await loadMods();
-            await loadInstalled();
+            loadInstalledMods();
+            loadAvailableMods();
         } catch (e) {
             toast({
                 title: "Не удалось установить базовую сборку",
                 type: "error",
             });
+        } finally {
+            prepareBtn.innerHTML =
+                '<i class="fas fa-download"></i> Установить базу';
         }
-        prepareBtn.innerHTML = "Установить базу";
-    });
-    search?.addEventListener("input", () => loadMods());
+    }
+
+    async function saveModpack() {
+        const name = nameInput.value.trim();
+        if (!name) {
+            toast({ title: "Введите название сборки", type: "error" });
+            return;
+        }
+        const version = versionSelect.value;
+        const loader = loaderSelect.value;
+        if (!version || !loader) {
+            toast({ title: "Выберите версию и загрузчик", type: "error" });
+            return;
+        }
+        const description = descInput.value.trim();
+        try {
+            const result = await eel.save_custom_modpack(
+                name,
+                description,
+                version,
+                loader,
+            )();
+            if (result && result.ok) {
+                toast({
+                    title: "Сборка сохранена",
+                    message: name,
+                    type: "success",
+                });
+                closeModpackModal();
+                updateVersionGrid(); // обновить сетку сборок
+            } else {
+                toast({
+                    title: "Ошибка сохранения",
+                    message: result?.error || "Неизвестная ошибка",
+                    type: "error",
+                });
+            }
+        } catch (e) {
+            toast({ title: "Ошибка сохранения", type: "error" });
+        }
+    }
+
+    async function loadAvailableMods() {
+        const version = versionSelect.value;
+        const loader = loaderSelect.value;
+        if (!version || !loader) return;
+        resultsEl.innerHTML =
+            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
+        try {
+            const mods = await eel.search_mods(
+                provider,
+                searchInput.value,
+                version,
+                loader,
+                20,
+                "downloads",
+            )();
+            document.getElementById("mods-count-badge").textContent =
+                mods.length;
+            resultsEl.innerHTML =
+                mods
+                    .map(
+                        (m) => `
+                <div class="mod-result-card">
+                    <div class="mod-result-icon">${m.icon ? `<img src="${m.icon}" alt="">` : '<i class="fas fa-cube"></i>'}</div>
+                    <div class="mod-result-info">
+                        <div class="mod-result-name">${m.title}</div>
+                        <div class="mod-result-author">${m.author || ""}</div>
+                        <div class="mod-result-meta">
+                            <span class="mod-result-version">${m.version || "—"}</span>
+                            <span class="mod-result-downloads"><i class="fas fa-download"></i> ${m.downloads || 0}</span>
+                        </div>
+                    </div>
+                    <div class="mod-result-action">
+                        <button class="mod-install-btn" data-id="${m.project_id}">Установить</button>
+                    </div>
+                </div>
+            `,
+                    )
+                    .join("") ||
+                '<div class="mod-empty"><i class="fas fa-search"></i><p>Ничего не найдено</p></div>';
+
+            // Вешаем обработчики установки
+            resultsEl.querySelectorAll(".mod-install-btn").forEach((btn) =>
+                btn.addEventListener("click", async function () {
+                    const modId = this.dataset.id;
+                    this.textContent = "Установка...";
+                    this.disabled = true;
+                    try {
+                        const res = await eel.install_mod(
+                            provider,
+                            modId,
+                            version,
+                            version,
+                            loader,
+                        )();
+                        if (res.ok) {
+                            this.textContent = "Установлено";
+                            this.classList.add("installed");
+                            loadInstalledMods();
+                        } else {
+                            this.textContent = "Ошибка";
+                        }
+                    } catch (e) {
+                        this.textContent = "Ошибка";
+                    } finally {
+                        this.disabled = false;
+                    }
+                }),
+            );
+        } catch (e) {
+            resultsEl.innerHTML =
+                '<div class="mod-empty"><i class="fas fa-exclamation-triangle"></i><p>Ошибка загрузки каталога</p></div>';
+        }
+    }
+
+    async function loadInstalledMods() {
+        const version = versionSelect.value;
+        if (!version) return;
+        try {
+            const list = await eel.list_installed_mods(version)();
+            document.getElementById("installed-mods-count").textContent =
+                list.length;
+            installedList.innerHTML =
+                list
+                    .map(
+                        (m) => `
+                <div class="installed-mod-chip">
+                    <span class="chip-icon">${m.icon ? `<img src="${m.icon}">` : '<i class="fas fa-cube"></i>'}</span>
+                    <span>${m.name}</span>
+                    <span class="chip-remove" data-mod="${m.name}" title="Удалить"><i class="fas fa-times"></i></span>
+                </div>
+            `,
+                    )
+                    .join("") ||
+                '<div class="mod-empty"><p>Пока нет установленных модов</p></div>';
+
+            // Удаление мода
+            installedList.querySelectorAll(".chip-remove").forEach((el) =>
+                el.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    const modName = el.dataset.mod;
+                    try {
+                        await eel.delete_installed_mod(version, modName)();
+                        loadInstalledMods();
+                        toast({
+                            title: "Мод удалён",
+                            message: modName,
+                            type: "info",
+                        });
+                    } catch (err) {
+                        toast({ title: "Ошибка удаления", type: "error" });
+                    }
+                }),
+            );
+        } catch (e) {
+            installedList.innerHTML =
+                '<div class="mod-empty"><p>Ошибка загрузки списка</p></div>';
+        }
+    }
+
+    // Вспомогательный debounce
+    function debounce(fn, delay) {
+        let timer;
+        return function (...args) {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn.apply(this, args), delay);
+        };
+    }
 });
 
-// // ---------- Network room (FastAPI backend + TURN control plane) ----------
-// (function initNetworkPanel() {
-//     document.addEventListener("DOMContentLoaded", async () => {
-//         const serversSection = document.getElementById("servers");
-//         if (!serversSection || document.getElementById("network-room-panel"))
-//             return;
-
-//         const panel = document.createElement("div");
-//         panel.id = "network-room-panel";
-//         panel.className = "launcher-card network-room-panel";
-//         panel.innerHTML = `
-//             <h3 class="network-room-title">Сетевая комната (Hamachi/Radmin стиль)</h3>
-//             <div class="network-grid">
-//                 <input id="network-backend-url" placeholder="https://your-domain.tld" />
-//                 <input id="network-room-id" placeholder="Название комнаты" />
-//                 <input id="network-room-password" type="password" placeholder="Пароль комнаты" />
-//                 <input id="network-nickname" placeholder="Ваш ник" />
-//                 <button id="network-save-btn">Сохранить</button>
-//                 <button id="network-create-btn">Создать</button>
-//                 <button id="network-join-btn">Подключиться</button>
-//                 <button id="network-refresh-btn">Обновить</button>
-//                 <button id="network-connect-btn">Проверить вход в игру</button>
-//                 <button id="network-auto-btn">Авто-маршрут</button>
-//             </div>
-//             <div id="network-status" class="network-room-status">Не настроено</div>
-//             <div id="network-peers" class="network-room-peers"></div>
-//         `;
-//         serversSection.appendChild(panel);
-
-//         const backendUrlEl = document.getElementById("network-backend-url");
-//         const roomEl = document.getElementById("network-room-id");
-//         const roomPasswordEl = document.getElementById("network-room-password");
-//         const nickEl = document.getElementById("network-nickname");
-//         const statusEl = document.getElementById("network-status");
-//         const peersEl = document.getElementById("network-peers");
-
-//         async function loadConfig() {
-//             try {
-//                 const cfg = await eel.get_network_config()();
-//                 backendUrlEl.value = cfg?.backend_url || "";
-//                 roomEl.value = cfg?.active_room || "";
-//                 nickEl.value = cfg?.nickname || "";
-//             } catch (e) {}
-//         }
-
-//         function barsForPing(ping) {
-//             const value = Number(ping);
-//             if (!Number.isFinite(value)) return 0;
-//             if (value <= 60) return 3;
-//             if (value <= 130) return 2;
-//             if (value <= 220) return 1;
-//             return 0;
-//         }
-
-//         function renderPeers(peers) {
-//             if (!Array.isArray(peers) || peers.length === 0) {
-//                 peersEl.innerHTML =
-//                     "<div class='empty-state'>В комнате пока нет пользователей.</div>";
-//                 return;
-//             }
-//             peersEl.innerHTML = peers
-//                 .map((p) => {
-//                     const name =
-//                         p?.nickname || p?.name || p?.user_id || "Unknown";
-//                     const ping = p?.ping_ms ?? p?.ping ?? "—";
-//                     const status =
-//                         p?.status || (p?.online ? "Online" : "Offline");
-//                     const bars = barsForPing(ping);
-//                     return `<div class='server-card' style='margin-bottom:8px'>
-//                         <div class='server-info'>
-//                             <div class='server-title'>${name}</div>
-//                             <div class='server-status'>
-//                                 <div><i class='fas fa-gauge'></i> ${ping} ms</div>
-//                                 <div class="network-signal" title="Сигнал сети">
-//                                     <span class="${bars >= 1 ? "on" : ""}"></span>
-//                                     <span class="${bars >= 2 ? "on" : ""}"></span>
-//                                     <span class="${bars >= 3 ? "on" : ""}"></span>
-//                                 </div>
-//                                 <div class='status ${String(status).toLowerCase()}'>${status}</div>
-//                             </div>
-//                         </div>
-//                     </div>`;
-//                 })
-//                 .join("");
-//         }
-
-//         async function refreshPeers() {
-//             const room = roomEl.value.trim();
-//             if (!room) {
-//                 statusEl.textContent = "Укажите room_id";
-//                 return;
-//             }
-//             statusEl.textContent = "Обновление...";
-//             try {
-//                 const res = await eel.get_network_peers(room)();
-//                 if (!res?.ok) {
-//                     statusEl.textContent = `Ошибка: ${res?.error || "unknown"}`;
-//                     renderPeers([]);
-//                     return;
-//                 }
-//                 statusEl.textContent = `Комната ${res.room_id}: ${res.peers.length} участ.`;
-//                 renderPeers(res.peers || []);
-//             } catch (e) {
-//                 statusEl.textContent = `Ошибка: ${e}`;
-//             }
-//         }
-
-//         document
-//             .getElementById("network-save-btn")
-//             .addEventListener("click", async () => {
-//                 try {
-//                     await eel.save_network_config(
-//                         backendUrlEl.value.trim(),
-//                         nickEl.value.trim(),
-//                         roomEl.value.trim(),
-//                     )();
-//                     statusEl.textContent = "Настройки сохранены";
-//                     toast({
-//                         title: "Сеть",
-//                         message: "Настройки сохранены",
-//                         type: "success",
-//                     });
-//                 } catch (e) {
-//                     statusEl.textContent = `Ошибка сохранения: ${e}`;
-//                 }
-//             });
-
-//         document
-//             .getElementById("network-create-btn")
-//             .addEventListener("click", async () => {
-//                 statusEl.textContent = "Создание комнаты...";
-//                 try {
-//                     await eel.save_network_config(
-//                         backendUrlEl.value.trim(),
-//                         nickEl.value.trim(),
-//                         roomEl.value.trim(),
-//                     )();
-//                     const res = await eel.create_network_room(
-//                         roomEl.value.trim(),
-//                         roomPasswordEl.value.trim(),
-//                         nickEl.value.trim(),
-//                     )();
-//                     if (!res?.ok) {
-//                         statusEl.textContent = `Ошибка создания: ${res?.error || "unknown"}`;
-//                         return;
-//                     }
-//                     roomEl.value = res.room_id || roomEl.value.trim();
-//                     statusEl.textContent = `Комната ${roomEl.value} создана`;
-//                     toast({
-//                         title: "Сеть",
-//                         message: "Комната создана",
-//                         type: "success",
-//                     });
-//                     await refreshPeers();
-//                 } catch (e) {
-//                     statusEl.textContent = `Ошибка создания: ${e}`;
-//                 }
-//             });
-
-//         document
-//             .getElementById("network-join-btn")
-//             .addEventListener("click", async () => {
-//                 statusEl.textContent = "Подключение к комнате...";
-//                 try {
-//                     await eel.save_network_config(
-//                         backendUrlEl.value.trim(),
-//                         nickEl.value.trim(),
-//                         roomEl.value.trim(),
-//                     )();
-//                     const res = await eel.join_network_room(
-//                         roomEl.value.trim(),
-//                         roomPasswordEl.value.trim(),
-//                         nickEl.value.trim(),
-//                     )();
-//                     if (!res?.ok) {
-//                         statusEl.textContent = `Ошибка подключения: ${res?.error || "unknown"}`;
-//                         return;
-//                     }
-//                     roomEl.value = res.room_id || roomEl.value.trim();
-//                     statusEl.textContent = `Подключено к комнате ${roomEl.value}`;
-//                     toast({
-//                         title: "Сеть",
-//                         message: "Подключение выполнено",
-//                         type: "success",
-//                     });
-//                     await refreshPeers();
-//                 } catch (e) {
-//                     statusEl.textContent = `Ошибка подключения: ${e}`;
-//                 }
-//             });
-
-//         document
-//             .getElementById("network-refresh-btn")
-//             .addEventListener("click", refreshPeers);
-//         document
-//             .getElementById("network-connect-btn")
-//             .addEventListener("click", async () => {
-//                 statusEl.textContent = "Проверка TCP-пути до хоста...";
-//                 try {
-//                     const res = await eel.test_room_connection(
-//                         roomEl.value.trim(),
-//                     )();
-//                     if (!res?.ok) {
-//                         statusEl.textContent = `Ошибка проверки: ${res?.error || "unknown"}`;
-//                         return;
-//                     }
-//                     statusEl.textContent = res.reachable
-//                         ? `Готово: ${res.endpoint.address} доступен. Можно входить в Minecraft.`
-//                         : `Нет TCP пути до ${res.endpoint.address}. Нужен VPN/туннель/relay.`;
-//                 } catch (e) {
-//                     statusEl.textContent = `Ошибка проверки: ${e}`;
-//                 }
-//             });
-//         document
-//             .getElementById("network-auto-btn")
-//             .addEventListener("click", async () => {
-//                 statusEl.textContent = "Определение оптимального маршрута...";
-//                 try {
-//                     const res = await eel.get_connection_plan(
-//                         roomEl.value.trim(),
-//                     )();
-//                     if (!res?.ok) {
-//                         statusEl.textContent = `Нет маршрута: ${res?.error || "unknown"}`;
-//                         return;
-//                     }
-//                     if (res.mode === "direct") {
-//                         statusEl.textContent = `Режим Direct: ${res.endpoint.address} доступен напрямую`;
-//                         return;
-//                     }
-//                     statusEl.textContent = `Режим Relay: direct недоступен, используйте TURN (${(res.turn?.urls || []).length} серв.)`;
-//                 } catch (e) {
-//                     statusEl.textContent = `Ошибка авто-маршрута: ${e}`;
-//                 }
-//             });
-
-//         await loadConfig();
-//     });
-// })();
+window.openModpackModal = openModpackModal;

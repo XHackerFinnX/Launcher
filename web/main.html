@@ -24,9 +24,7 @@
         <link rel="stylesheet" href="css/main.css" />
         <link rel="stylesheet" href="css/customization.css" />
         <link rel="stylesheet" href="css/network-room.css" />
-        <!-- Eel: реальный для десктопа, мок для предпросмотра -->
         <script src="/eel.js"></script>
-        <script src="js/eel-mock.js"></script>
     </head>
 
     <body>
@@ -100,7 +98,12 @@
                 </div>
                 <div class="menu-item" data-section="network">
                     <i class="fas fa-network-wired"></i>
-                    <span>Сеть</span>
+                    <div>
+                        <span>Сеть</span>
+                        <span style="font-size: 11px; color: var(--text-dim)"
+                            >(в разработке)</span
+                        >
+                    </div>
                 </div>
                 <div class="menu-item" data-section="accounts">
                     <i class="fas fa-user"></i>
@@ -348,9 +351,9 @@
                                 <span class="count" data-count="fabric">0</span>
                             </button>
                         </div>
-                        <!-- <button class="btn-primary" id="open-modpack-creator">
+                        <button class="btn-primary" id="open-modpack-creator">
                             <i class="fas fa-plus"></i> Создать сборку
-                        </button> -->
+                        </button>
                     </div>
 
                     <div class="versions-grid"></div>
@@ -1531,39 +1534,145 @@
 
         <div class="modpack-modal hidden" id="modpack-modal">
             <div class="modpack-card">
-                <button id="close-modpack-modal" class="btn-secondary">
-                    Закрыть
-                </button>
-                <h3>Создать сборку</h3>
-                <div class="modpack-top">
-                    <input
-                        id="modpack-version"
-                        class="search-input"
-                        placeholder="Версия (например 1.20.1)"
-                    />
-                    <select id="modpack-loader" class="version-deletion-select">
-                        <option value="forge">Forge</option>
-                        <option value="fabric">Fabric</option>
-                    </select>
-                    <button class="btn-primary" id="prepare-modpack">
-                        Установить базу
+                <div class="modal-header">
+                    <div class="modal-header-left">
+                        <div class="modal-icon">
+                            <i class="fas fa-box-archive"></i>
+                        </div>
+                        <div class="modal-header-text">
+                            <h3 id="modpack-modal-title">Создать сборку</h3>
+                            <p id="modpack-modal-subtitle">
+                                Выберите версию, загрузчик и моды
+                            </p>
+                        </div>
+                    </div>
+                    <button id="close-modpack-modal" class="modal-close-btn">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="mod-tabs">
-                    <button class="filter-tab active" data-provider="modrinth">
-                        Modrinth</button
-                    ><button class="filter-tab" data-provider="curseforge">
-                        CurseForge
-                    </button>
+
+                <div class="modal-body">
+                    <!-- Режим: create / manage -->
+                    <input type="hidden" id="modpack-mode" value="create" />
+                    <input type="hidden" id="modpack-edit-id" value="" />
+
+                    <!-- Поля названия и описания -->
+                    <div class="modpack-meta">
+                        <div class="modpack-field">
+                            <label for="modpack-name">Название сборки</label>
+                            <input
+                                id="modpack-name"
+                                class="search-input"
+                                placeholder="Моя сборка"
+                                maxlength="64"
+                            />
+                        </div>
+                        <div class="modpack-field">
+                            <label for="modpack-description">Описание</label>
+                            <input
+                                id="modpack-description"
+                                class="search-input"
+                                placeholder="Описание сборки (необязательно)"
+                                maxlength="200"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Выбор версии и загрузчика -->
+                    <div class="modpack-top">
+                        <div class="modpack-field">
+                            <label for="modpack-version"
+                                >Версия Minecraft</label
+                            >
+                            <select
+                                id="modpack-version"
+                                class="modpack-loader-select"
+                            >
+                                <option value="">Выберите версию</option>
+                            </select>
+                        </div>
+                        <div class="modpack-field">
+                            <label for="modpack-loader">Загрузчик</label>
+                            <select
+                                id="modpack-loader"
+                                class="modpack-loader-select"
+                            >
+                                <option value="">
+                                    Сначала выберите версию
+                                </option>
+                            </select>
+                        </div>
+                        <div class="modpack-field modpack-prepare">
+                            <label>&nbsp;</label>
+                            <button class="btn-primary" id="prepare-modpack">
+                                <i class="fas fa-download"></i> Установить базу
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Провайдеры модов -->
+                    <div class="mod-tabs">
+                        <button
+                            class="filter-tab active"
+                            data-provider="modrinth"
+                        >
+                            <i class="fas fa-cube"></i> Modrinth
+                        </button>
+                        <button class="filter-tab" data-provider="curseforge">
+                            <i class="fas fa-fire"></i> CurseForge
+                        </button>
+                    </div>
+
+                    <!-- Поиск и список модов -->
+                    <div class="mod-section">
+                        <div class="mod-section-header">
+                            <h4>
+                                <i class="fas fa-magnifying-glass"></i>
+                                Доступные моды
+                            </h4>
+                            <span
+                                class="mod-section-badge"
+                                id="mods-count-badge"
+                                >0</span
+                            >
+                        </div>
+                        <div class="mod-search-wrap">
+                            <i class="fas fa-search"></i>
+                            <input
+                                id="mod-search"
+                                class="search-input"
+                                placeholder="Поиск мода..."
+                            />
+                        </div>
+                        <div id="mods-results" class="mods-results-list"></div>
+                    </div>
+
+                    <!-- Установленные моды -->
+                    <div class="mod-section">
+                        <div class="mod-section-header">
+                            <h4>
+                                <i class="fas fa-check-circle"></i>
+                                Установленные моды
+                            </h4>
+                            <span
+                                class="mod-section-badge"
+                                id="installed-mods-count"
+                                >0</span
+                            >
+                        </div>
+                        <div
+                            id="installed-mods-list"
+                            class="installed-mods-chips"
+                        ></div>
+                    </div>
+
+                    <!-- Кнопка сохранения (видна только в режиме создания) -->
+                    <div id="modpack-save-row" class="modpack-footer">
+                        <button id="modpack-save-btn" class="btn-primary">
+                            <i class="fas fa-save"></i> Сохранить сборку
+                        </button>
+                    </div>
                 </div>
-                <input
-                    id="mod-search"
-                    class="search-input"
-                    placeholder="Поиск мода"
-                />
-                <div id="mods-results" class="updates-list"></div>
-                <h4>Установленные моды</h4>
-                <div id="installed-mods-list" class="updates-list"></div>
             </div>
         </div>
 
