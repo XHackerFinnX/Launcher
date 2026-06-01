@@ -75,13 +75,17 @@ def minecraft_download_version(version: str):
 @eel.expose
 def minecraft_download_version_build(version_fabric_forge: str):
     minecraft_directory_version = minecraft_directory + f"\\{version_fabric_forge}"
-    version_null = version_fabric_forge.split()[-1]
-    name = version_fabric_forge.split()[0]
+    parts = version_fabric_forge.split()
+    version_null = parts[-1] if parts else version_fabric_forge
+    name = parts[0] if parts else version_fabric_forge
+    build_lower = f" {version_fabric_forge.lower()} "
+    is_forge_build = name.startswith('Forge') or " forge " in build_lower
+    is_fabric_build = name.startswith('Fabric') or " fabric " in build_lower
     
     if not os.path.exists(minecraft_directory_version):
         try:
             logger.info("Начало установки сборки: %s", version_fabric_forge)
-            if name.startswith('Forge'):
+            if is_forge_build:
                 version = _resolve_forge_version(version_null)
                 minecraft_launcher_lib.forge.install_forge_version(
                     versionid=version, 
@@ -89,7 +93,7 @@ def minecraft_download_version_build(version_fabric_forge: str):
                     callback=callback
                 )
             
-            elif name.startswith('Fabric'):
+            elif is_fabric_build:
                 if not minecraft_launcher_lib.fabric.is_minecraft_version_supported(version_null):
                     raise RuntimeError(f"Fabric не поддерживает версию Minecraft {version_null}")
                 loader_version = minecraft_launcher_lib.fabric.get_latest_loader_version()

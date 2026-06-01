@@ -97,7 +97,7 @@ def run_minecraft(login: str, version: str, server: str):
         _set_state(STATE_STARTING, progress=35)
         _update_ui_progress(35)
 
-        if version.startswith('Forge') or version.startswith('ПВП'):
+        if version.startswith('Forge') or version.startswith('ПВП') or ' Forge ' in f' {version} ':
             folders = [folder for folder in os.listdir(path) if os.path.isdir(os.path.join(path, folder))]
             for folder in folders:
                 if folder.lower().startswith('forge'):
@@ -108,7 +108,7 @@ def run_minecraft(login: str, version: str, server: str):
                     if 'forge' in folder:
                         version = folder
                         
-        elif version.startswith('Fabric'):
+        elif version.startswith('Fabric') or ' Fabric ' in f' {version} ':
             folders = [folder for folder in os.listdir(path) if os.path.isdir(os.path.join(path, folder))]
             for folder in folders:
                 if folder.lower().startswith("fabric-loader") and version.split()[-1] in folder:

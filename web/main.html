@@ -1542,7 +1542,7 @@
                         <div class="modal-header-text">
                             <h3 id="modpack-modal-title">Создать сборку</h3>
                             <p id="modpack-modal-subtitle">
-                                Выберите версию, загрузчик и моды
+                                Сначала создайте сборку, затем установите её и управляйте модами
                             </p>
                         </div>
                     </div>
@@ -1604,12 +1604,13 @@
                         </div>
                         <div class="modpack-field modpack-prepare">
                             <label>&nbsp;</label>
-                            <button class="btn-primary" id="prepare-modpack">
-                                <i class="fas fa-download"></i> Установить базу
-                            </button>
+                            <div class="modpack-lock-note" id="modpack-create-note">
+                                Ядро появится после выбора версии
+                            </div>
                         </div>
                     </div>
 
+                    <div id="modpack-manage-tools" class="modpack-manage-tools"></div>
                     <!-- Провайдеры модов -->
                     <div class="mod-tabs">
                         <button
@@ -1618,13 +1619,11 @@
                         >
                             <i class="fas fa-cube"></i> Modrinth
                         </button>
-                        <button class="filter-tab" data-provider="curseforge">
-                            <i class="fas fa-fire"></i> CurseForge
-                        </button>
                     </div>
 
                     <!-- Поиск и список модов -->
-                    <div class="mod-section">
+                    <div class="modpack-mods-layout">
+                    <div class="mod-section mod-catalog-section">
                         <div class="mod-section-header">
                             <h4>
                                 <i class="fas fa-magnifying-glass"></i>
@@ -1648,7 +1647,7 @@
                     </div>
 
                     <!-- Установленные моды -->
-                    <div class="mod-section">
+                    <div class="mod-section installed-mods-section">
                         <div class="mod-section-header">
                             <h4>
                                 <i class="fas fa-check-circle"></i>
@@ -1665,11 +1664,13 @@
                             class="installed-mods-chips"
                         ></div>
                     </div>
+                    </div>
+                    </div>
 
-                    <!-- Кнопка сохранения (видна только в режиме создания) -->
+                    <!-- Кнопка сохранения (видна только в режиме создания/управления) -->
                     <div id="modpack-save-row" class="modpack-footer">
                         <button id="modpack-save-btn" class="btn-primary">
-                            <i class="fas fa-save"></i> Сохранить сборку
+                            <i class="fas fa-plus"></i> Создать
                         </button>
                     </div>
                 </div>

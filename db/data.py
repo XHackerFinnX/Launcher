@@ -1624,7 +1624,7 @@ def search_mods(provider, query, game_version, loader, limit=24, index='relevanc
         r = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
         hits = r.json().get('hits', [])
-        return [{"provider":"modrinth","project_id":h.get('project_id'),"title":h.get('title'),"description":h.get('description'),"icon":h.get('icon_url'),"downloads":h.get('downloads',0),"author":h.get('author')} for h in hits]
+        return [{"provider":"modrinth","project_id":h.get('project_id'),"slug":h.get('slug'),"title":h.get('title'),"description":h.get('description'),"icon":h.get('icon_url'),"downloads":h.get('downloads',0),"author":h.get('author'),"url":f"https://modrinth.com/mod/{h.get('slug') or h.get('project_id')}"} for h in hits]
     return []
 
 @eel.expose
@@ -1655,3 +1655,180 @@ def install_mod(provider, project_id, version_name, game_version, loader):
     target = mods_path / filename
     _download_file_to_target(file_url, target)
     return {"ok": True, "name": filename, "size": target.stat().st_size, "installed_at": datetime.utcnow().isoformat()}
+
+# ---------- Custom modpacks ----------
+def _normalize_loader(loader):
+    loader = str(loader or "").strip().lower()
+    return loader if loader in {"forge", "fabric"} else ""
+
+
+def _custom_build_id(name, game_version, loader):
+    safe_name = " ".join(str(name or "").strip().split())
+    loader_label = "Fabric" if loader == "fabric" else "Forge"
+    return f"{safe_name} {loader_label} {game_version}".strip()
+
+
+def _ensure_custom_modpacks_table(cursor):
+    cursor.execute('''CREATE TABLE IF NOT EXISTS custom_modpacks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        build_id TEXT NOT NULL UNIQUE,
+                        name TEXT NOT NULL UNIQUE,
+                        description TEXT DEFAULT '',
+                        game_version TEXT NOT NULL,
+                        loader TEXT NOT NULL,
+                        provider TEXT DEFAULT 'modrinth',
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP)''')
+
+
+@eel.expose
+def get_available_loaders(game_version):
+    game_version = str(game_version or "").strip()
+    loaders = []
+    if not game_version:
+        return loaders
+    try:
+        if minecraft_launcher_lib.forge.find_forge_version(game_version):
+            loaders.append("forge")
+    except Exception:
+        logger.debug("Не удалось проверить Forge для %s", game_version, exc_info=True)
+    try:
+        if minecraft_launcher_lib.fabric.is_minecraft_version_supported(game_version):
+            loaders.append("fabric")
+    except Exception:
+        logger.debug("Не удалось проверить Fabric для %s", game_version, exc_info=True)
+    return loaders
+
+
+@eel.expose
+def save_custom_modpack(payload):
+    payload = payload or {}
+    name = " ".join(str(payload.get("name") or "").strip().split())
+    description = str(payload.get("description") or payload.get("desc") or "").strip()
+    game_version = str(payload.get("version") or payload.get("game_version") or "").strip()
+    loader = _normalize_loader(payload.get("loader"))
+    provider = str(payload.get("provider") or "modrinth").strip().lower() or "modrinth"
+    edit_id = str(payload.get("id") or payload.get("build_id") or "").strip()
+
+    if not name:
+        return {"ok": False, "error": "Укажите название сборки"}
+    if not game_version:
+        return {"ok": False, "error": "Выберите версию Minecraft"}
+    if not loader:
+        return {"ok": False, "error": "Выберите Forge или Fabric"}
+    if provider != "modrinth":
+        provider = "modrinth"
+
+    build_id = edit_id or _custom_build_id(name, game_version, loader)
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    _ensure_custom_modpacks_table(cursor)
+    try:
+        if edit_id:
+            cursor.execute(
+                """
+                UPDATE custom_modpacks
+                SET description = ?, provider = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE build_id = ?
+                """,
+                (description, provider, edit_id),
+            )
+            if cursor.rowcount == 0:
+                return {"ok": False, "error": "Сборка не найдена"}
+        else:
+            cursor.execute(
+                """
+                INSERT INTO custom_modpacks (build_id, name, description, game_version, loader, provider)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (build_id, name, description, game_version, loader, provider),
+            )
+        conn.commit()
+        return {
+            "ok": True,
+            "build": {
+                "id": build_id,
+                "build_id": build_id,
+                "name": name,
+                "description": description,
+                "version": game_version,
+                "loader": loader,
+                "provider": provider,
+            },
+        }
+    except Exception as exc:
+        conn.rollback()
+        logger.exception("Не удалось сохранить кастомную сборку")
+        message = "Сборка с таким названием уже существует" if "UNIQUE" in str(exc).upper() else str(exc)
+        return {"ok": False, "error": message}
+    finally:
+        conn.close()
+
+
+@eel.expose
+def get_custom_modpacks():
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    _ensure_custom_modpacks_table(cursor)
+    cursor.execute(
+        """
+        SELECT build_id, name, description, game_version, loader, provider
+        FROM custom_modpacks
+        ORDER BY updated_at DESC, id DESC
+        """
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        {
+            "id": row[0],
+            "build_id": row[0],
+            "name": row[1],
+            "description": row[2] or "",
+            "version": row[3],
+            "loader": row[4],
+            "provider": row[5] or "modrinth",
+        }
+        for row in rows
+    ]
+
+
+@eel.expose
+def get_custom_modpack(build_id):
+    build_id = str(build_id or "").strip()
+    if not build_id:
+        return None
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    _ensure_custom_modpacks_table(cursor)
+    cursor.execute(
+        """
+        SELECT build_id, name, description, game_version, loader, provider
+        FROM custom_modpacks
+        WHERE build_id = ?
+        """,
+        (build_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "build_id": row[0],
+        "name": row[1],
+        "description": row[2] or "",
+        "version": row[3],
+        "loader": row[4],
+        "provider": row[5] or "modrinth",
+    }
+
+
+@eel.expose
+def delete_installed_mod(version_name, mod_name):
+    mods_path = _mods_dir(version_name)
+    target = mods_path / Path(str(mod_name or "")).name
+    if not target.exists() or target.suffix.lower() != ".jar":
+        return {"ok": False, "error": "Мод не найден"}
+    target.unlink()
+    return {"ok": True}

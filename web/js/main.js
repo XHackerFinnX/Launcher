@@ -1225,6 +1225,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // ---------- Versions grid (Home & Builds) with search/filter ----------
 let allHomeVersions = [];
 let allBuildVersions = [];
+let customModpacksById = new Map();
 
 function classifyBuild(version) {
     const v = String(version).toLowerCase();
@@ -1241,7 +1242,12 @@ function buildIcon(type) {
 }
 
 function createVersionCard(version, options = {}) {
-    const { isInstalled, type = null, onDownload } = options;
+    const {
+        isInstalled,
+        type = null,
+        onDownload,
+        customBuild = null,
+    } = options;
 
     const card = document.createElement("div");
     card.className = "version-card";
@@ -1271,7 +1277,15 @@ function createVersionCard(version, options = {}) {
 
     const title = document.createElement("div");
     title.className = "version-title";
-    title.textContent = type ? version : `Minecraft ${version}`;
+    title.textContent =
+        customBuild?.name || (type ? version : `Minecraft ${version}`);
+
+    let descriptionEl = null;
+    if (customBuild?.description) {
+        descriptionEl = document.createElement("div");
+        descriptionEl.className = "version-description";
+        descriptionEl.textContent = customBuild.description;
+    }
 
     const actions = document.createElement("div");
     actions.className = "version-card-actions";
@@ -1285,14 +1299,16 @@ function createVersionCard(version, options = {}) {
         downloadBtn.classList.add("installed");
         downloadBtn.disabled = true;
     } else {
-        downloadBtn.innerHTML = '<i class="fas fa-download"></i> Скачать';
+        downloadBtn.innerHTML = customBuild
+            ? '<i class="fas fa-download"></i> Установить'
+            : '<i class="fas fa-download"></i> Скачать';
         downloadBtn.addEventListener("click", () => onDownload(downloadBtn));
     }
 
     actions.appendChild(downloadBtn);
 
-    if (type) {
-        // только для сборок (не ванильных версий)
+    if (customBuild) {
+        // настройки доступны только для пользовательских сборок
         const settingsBtn = document.createElement("button");
         settingsBtn.className = "settings-modpack-btn";
         settingsBtn.innerHTML = '<i class="fas fa-gear"></i>';
@@ -1300,12 +1316,13 @@ function createVersionCard(version, options = {}) {
         settingsBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             // Открыть модальное окно в режиме управления
-            openModpackManageModal(version, type);
+            openModpackManageModal(version);
         });
         actions.appendChild(settingsBtn);
     }
 
     body.appendChild(title);
+    if (descriptionEl) body.appendChild(descriptionEl);
     body.appendChild(actions);
 
     card.appendChild(cover);
@@ -1323,6 +1340,7 @@ async function updateVersionGrid() {
 
     let onlineVersions = { releases: [], forge: [], fabric: [] };
     let manifestBuilds = [];
+    let customBuilds = [];
     try {
         onlineVersions =
             (await eel.get_online_minecraft_versions(120)()) || onlineVersions;
@@ -1330,9 +1348,16 @@ async function updateVersionGrid() {
     try {
         manifestBuilds = await getManifestBuilds();
     } catch (e) {}
+    try {
+        customBuilds = (await eel.get_custom_modpacks()()) || [];
+    } catch (e) {}
+    customModpacksById = new Map(
+        customBuilds.map((build) => [build.id || build.build_id, build]),
+    );
 
     const versions = onlineVersions.releases || [];
     const versions_build = [
+        ...customBuilds.map((build) => build.id || build.build_id),
         ...manifestBuilds,
         ...(onlineVersions.forge || []),
         ...(onlineVersions.fabric || []),
@@ -1406,6 +1431,8 @@ async function updateVersionGrid() {
                                     '<i class="fas fa-check"></i> Установлено';
                                 cover.appendChild(b);
                             }
+                            const settingsBtn = btn.closest(".version-card")?.querySelector(".settings-modpack-btn");
+                            if (settingsBtn) settingsBtn.style.display = "flex";
                             toast({
                                 title: "Загружено",
                                 message: `Minecraft ${version}`,
@@ -1465,6 +1492,8 @@ async function updateVersionGrid() {
                             '<i class="fas fa-check"></i> Установлено';
                         cover.appendChild(b);
                     }
+                    const settingsBtn = btn.closest(".version-card")?.querySelector(".settings-modpack-btn");
+                    if (settingsBtn) settingsBtn.style.display = "flex";
                     toast({
                         title: "Загружено",
                         message: `Minecraft ${version}`,
@@ -1492,10 +1521,12 @@ async function updateVersionGrid() {
 
     // ----- Builds grid -----
     versions_build.forEach((version) => {
-        const type = classifyBuild(version);
+        const customBuild = customModpacksById.get(version);
+        const type = customBuild?.loader || classifyBuild(version);
         const card = createVersionCard(version, {
             isInstalled: installedVersionsSet.has(version),
             type,
+            customBuild,
             onDownload: async (btn) => {
                 const task = {
                     key: getDownloadTaskKey(version, true),
@@ -1550,6 +1581,8 @@ async function updateVersionGrid() {
                                     '<i class="fas fa-check"></i> Установлено';
                                 cover.appendChild(b);
                             }
+                            const settingsBtn = btn.closest(".version-card")?.querySelector(".settings-modpack-btn");
+                            if (settingsBtn) settingsBtn.style.display = "flex";
                             toast({
                                 title: "Загружено",
                                 message: version,
@@ -1609,6 +1642,8 @@ async function updateVersionGrid() {
                             '<i class="fas fa-check"></i> Установлено';
                         cover.appendChild(b);
                     }
+                    const settingsBtn = btn.closest(".version-card")?.querySelector(".settings-modpack-btn");
+                    if (settingsBtn) settingsBtn.style.display = "flex";
                     toast({
                         title: "Загружено",
                         message: version,
@@ -2604,20 +2639,35 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 });
 
-function openModpackManageModal(version, type) {
-    // Получаем данные сборки (можно из БД через eel)
-    // Для примера передаём базовые данные
-    const modpackData = {
-        id: version, // идентификатор сборки
-        name: version,
-        desc: "",
-        version: version,
-        loader: type, // forge / fabric / modpack
-    };
+async function openModpackManageModal(buildId) {
+    let modpackData = customModpacksById.get(buildId);
+    try {
+        const fresh = await eel.get_custom_modpack(buildId)();
+        if (fresh) modpackData = fresh;
+    } catch (e) {}
+
+    if (!modpackData) {
+        toast({ title: "Сборка не найдена", type: "error" });
+        return;
+    }
     openModpackModal("manage", modpackData);
 }
 
-// ---------- Modpack creator (улучшенный) ----------
+function getModrinthUrl(mod) {
+    return mod?.url || `https://modrinth.com/mod/${mod?.slug || mod?.project_id || ""}`;
+}
+
+function openExternalUrl(url) {
+    if (!url) return;
+    try {
+        window.open(url, "_blank");
+    } catch (e) {
+        location.href = url;
+    }
+}
+
+let openModpackModal = null;
+
 document.addEventListener("DOMContentLoaded", () => {
     const modal = document.getElementById("modpack-modal");
     const openBtn = document.getElementById("open-modpack-creator");
@@ -2629,286 +2679,237 @@ document.addEventListener("DOMContentLoaded", () => {
     const saveRow = document.getElementById("modpack-save-row");
     const saveBtn = document.getElementById("modpack-save-btn");
 
+    const manageTools = document.getElementById("modpack-manage-tools");
+    const createNote = document.getElementById("modpack-create-note");
     const versionSelect = document.getElementById("modpack-version");
     const loaderSelect = document.getElementById("modpack-loader");
     const nameInput = document.getElementById("modpack-name");
     const descInput = document.getElementById("modpack-description");
 
-    const prepareBtn = document.getElementById("prepare-modpack");
-    const resultsEl = document.getElementById("mods-results");
+    const providerTabs = modal?.querySelectorAll(".mod-tabs .filter-tab") || [];
     const searchInput = document.getElementById("mod-search");
+    const resultsEl = document.getElementById("mods-results");
     const installedList = document.getElementById("installed-mods-list");
 
     let provider = "modrinth";
+    let currentManagedBuildId = "";
 
-    // ---------- Открыть модальное окно (режим создания) ----------
     openBtn?.addEventListener("click", () => openModpackModal("create"));
     closeBtn?.addEventListener("click", closeModpackModal);
 
-    // Закрытие по клику вне карточки
     modal?.addEventListener("click", (e) => {
         if (e.target === modal) closeModpackModal();
     });
 
-    // Переключение провайдеров
-    document.querySelectorAll("[data-provider]").forEach((b) =>
-        b.addEventListener("click", () => {
-            provider = b.dataset.provider;
-            document
-                .querySelectorAll("[data-provider]")
-                .forEach((x) => x.classList.remove("active"));
-            b.classList.add("active");
-            loadAvailableMods();
-        }),
-    );
-
-    // Поиск модов
-    searchInput?.addEventListener("input", debounce(loadAvailableMods, 300));
-
-    // Выбор версии → обновление загрузчиков
+    
     versionSelect?.addEventListener("change", onVersionChange);
+    saveBtn?.addEventListener("click", saveCustomModpack);
+    searchInput?.addEventListener("input", debounce(loadAvailableMods, 350));
 
-    // Сохранить сборку
-    saveBtn?.addEventListener("click", saveModpack);
+    providerTabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+            providerTabs.forEach((t) => t.classList.remove("active"));
+            tab.classList.add("active");
+            provider = tab.dataset.provider || "modrinth";
+            loadAvailableMods();
+        });
+    });
 
-    // Установить базу
-    prepareBtn?.addEventListener("click", installBaseVersion);
-
-    // ---------- Функции ----------
-    function openModpackModal(mode, modpackData = null) {
+    openModpackModal = function (mode, modpackData = null) {
         if (!modal) return;
-        modal.classList.remove("hidden");
         modeInput.value = mode;
+        editIdInput.value = modpackData?.id || modpackData?.build_id || "";
+        currentManagedBuildId = editIdInput.value;
+        provider = modpackData?.provider || "modrinth";
+        modal.classList.remove("hidden");
+        resetModpackFormState();
 
         if (mode === "create") {
             modalTitle.textContent = "Создать сборку";
-            modalSubtitle.textContent = "Выберите версию, загрузчик и моды";
-            nameInput.value = "";
-            descInput.value = "";
-            versionSelect.value = "";
-            loaderSelect.innerHTML =
-                '<option value="">Сначала выберите версию</option>';
+            modalSubtitle.textContent = "Название → описание → версия → Forge/Fabric → Создать";
+            saveBtn.innerHTML = '<i class="fas fa-plus"></i> Создать';
+            manageTools.style.display = "none";
             saveRow.style.display = "flex";
-            editIdInput.value = "";
-            enableFields(true);
+            nameInput.disabled = false;
+            descInput.disabled = false;
+            versionSelect.disabled = false;
+            loaderSelect.disabled = false;
+            loadVersionsIfNeeded();
         } else if (mode === "manage" && modpackData) {
             modalTitle.textContent = "Управление сборкой";
-            modalSubtitle.textContent = modpackData.name || "Сборка";
+            modalSubtitle.textContent = modpackData.name || modpackData.id || "Сборка";
+            saveBtn.innerHTML = '<i class="fas fa-save"></i> Сохранить описание';
+            manageTools.style.display = "block";
+            saveRow.style.display = "flex";
             nameInput.value = modpackData.name || "";
-            descInput.value = modpackData.desc || "";
+            descInput.value = modpackData.description || modpackData.desc || "";
+            versionSelect.innerHTML = `<option value="${escapeHtml(modpackData.version)}">${escapeHtml(modpackData.version)}</option>`;
+            loaderSelect.innerHTML = `<option value="${escapeHtml(modpackData.loader)}">${escapeHtml(modpackData.loader === "fabric" ? "Fabric" : "Forge")}</option>`;
             versionSelect.value = modpackData.version || "";
-            editIdInput.value = modpackData.id || "";
-            saveRow.style.display = "none";
-            enableFields(false);
-            // Установить загрузчик
-            populateLoadersForVersion(modpackData.version).then(() => {
-                loaderSelect.value = modpackData.loader || "";
-            });
+            loaderSelect.value = modpackData.loader || "";
+            nameInput.disabled = true;
+            versionSelect.disabled = true;
+            loaderSelect.disabled = true;
+            descInput.disabled = false;
+            providerTabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.provider === provider));
+            loadAvailableMods();
             loadInstalledMods();
         }
 
-        // Заполнить список версий при первом открытии
-        if (versionSelect.options.length <= 1) {
-            populateVersionSelect();
-        }
-    }
+    };
 
     function closeModpackModal() {
         modal?.classList.add("hidden");
     }
 
-    function enableFields(enabled) {
-        nameInput.disabled = !enabled;
-        descInput.disabled = !enabled;
-        versionSelect.disabled = !enabled;
-        loaderSelect.disabled = !enabled;
-        prepareBtn.style.display = enabled ? "" : "none";
+    function resetModpackFormState() {
+        nameInput.value = "";
+        descInput.value = "";
+        searchInput.value = "";
+        resultsEl.innerHTML = "";
+        installedList.innerHTML = "";
+        document.getElementById("mods-count-badge").textContent = "0";
+        document.getElementById("installed-mods-count").textContent = "0";
+        if (createNote) createNote.textContent = "Ядро появится после выбора версии";
     }
 
-    async function populateVersionSelect() {
+    async function loadVersionsIfNeeded() {
+        if (versionSelect.options.length > 1) return;
+        versionSelect.innerHTML = '<option value="">Загрузка версий...</option>';
         try {
             const online = await eel.get_online_minecraft_versions(120)();
-            const releases = online?.releases || [];
-            versionSelect.innerHTML =
-                '<option value="">Выберите версию</option>';
-            releases.forEach((v) => {
+            versionSelect.innerHTML = '<option value="">Выберите версию</option>';
+            (online.releases || []).forEach((v) => {
                 const opt = document.createElement("option");
                 opt.value = v;
                 opt.textContent = v;
                 versionSelect.appendChild(opt);
             });
         } catch (e) {
-            console.warn("Не удалось загрузить список версий", e);
+            versionSelect.innerHTML = '<option value="">Ошибка загрузки</option>';
         }
+        loaderSelect.innerHTML = '<option value="">Сначала выберите версию</option>';
     }
 
     async function onVersionChange() {
         const version = versionSelect.value;
+        loaderSelect.innerHTML = '<option value="">Проверяем ядра...</option>';
+        loaderSelect.disabled = true;
         if (!version) {
-            loaderSelect.innerHTML =
-                '<option value="">Сначала выберите версию</option>';
+            loaderSelect.innerHTML = '<option value="">Сначала выберите версию</option>';
+            if (createNote) createNote.textContent = "Ядро появится после выбора версии";
             return;
         }
-        await populateLoadersForVersion(version);
-        loadAvailableMods();
-        if (modeInput.value === "manage") loadInstalledMods();
-    }
-
-    async function populateLoadersForVersion(version) {
-        loaderSelect.innerHTML = '<option value="">Загрузка...</option>';
+        
         try {
             const loaders = await eel.get_available_loaders(version)();
-            loaderSelect.innerHTML =
-                '<option value="">Выберите загрузчик</option>';
-            if (loaders && loaders.length) {
-                loaders.forEach((loader) => {
-                    const opt = document.createElement("option");
-                    opt.value = loader;
-                    opt.textContent =
-                        loader.charAt(0).toUpperCase() + loader.slice(1);
-                    loaderSelect.appendChild(opt);
-                });
-            } else {
-                loaderSelect.innerHTML =
-                    '<option value="">Нет доступных загрузчиков</option>';
+            loaderSelect.innerHTML = "";
+            if (!loaders.length) {
+                loaderSelect.innerHTML = '<option value="">Нет доступных ядер</option>';
+                if (createNote) createNote.textContent = "Для этой версии Forge/Fabric не найдены";
+                return;
             }
-        } catch (e) {
-            loaderSelect.innerHTML =
-                '<option value="">Ошибка загрузки</option>';
-            console.warn("get_available_loaders error", e);
-        }
-    }
-
-    async function installBaseVersion() {
-        const version = versionSelect.value;
-        const loader = loaderSelect.value;
-        if (!version || !loader) {
-            toast({ title: "Выберите версию и загрузчик", type: "error" });
-            return;
-        }
-        const build = `${version}-${loader}`;
-        prepareBtn.innerHTML =
-            '<i class="fas fa-spinner fa-spin"></i> Установка...';
-        try {
-            await eel.minecraft_download_version_build(build)();
-            await eel.insert_version(build)();
-            updateVersionGrid(); // обновить основную сетку
-            toast({
-                title: "Базовая сборка установлена",
-                message: build,
-                type: "success",
+            loaders.forEach((loader) => {
+                const opt = document.createElement("option");
+                opt.value = loader;
+                opt.textContent = loader === "fabric" ? "Fabric" : "Forge";
+                loaderSelect.appendChild(opt);
             });
-            loadInstalledMods();
-            loadAvailableMods();
+            if (createNote) createNote.textContent = `Доступно: ${loaders.map((l) => (l === "fabric" ? "Fabric" : "Forge")).join(", ")}`;
         } catch (e) {
-            toast({
-                title: "Не удалось установить базовую сборку",
-                type: "error",
-            });
+            loaderSelect.innerHTML = '<option value="">Ошибка проверки</option>';
         } finally {
-            prepareBtn.innerHTML =
-                '<i class="fas fa-download"></i> Установить базу';
+            loaderSelect.disabled = false;
         }
     }
 
-    async function saveModpack() {
-        const name = nameInput.value.trim();
-        if (!name) {
+    async function saveCustomModpack() {
+        const isManage = modeInput.value === "manage";
+        const payload = {
+            id: isManage ? editIdInput.value : "",
+            name: nameInput.value.trim(),
+            description: descInput.value.trim(),
+            version: versionSelect.value,
+            loader: loaderSelect.value,
+            provider,
+        };
+        if (!payload.name) {
             toast({ title: "Введите название сборки", type: "error" });
             return;
         }
-        const version = versionSelect.value;
-        const loader = loaderSelect.value;
-        if (!version || !loader) {
-            toast({ title: "Выберите версию и загрузчик", type: "error" });
+        if (!payload.version || !payload.loader) {
+            toast({ title: "Выберите версию и ядро", type: "error" });
             return;
         }
-        const description = descInput.value.trim();
+        saveBtn.disabled = true;
         try {
-            const result = await eel.save_custom_modpack(
-                name,
-                description,
-                version,
-                loader,
-            )();
-            if (result && result.ok) {
-                toast({
-                    title: "Сборка сохранена",
-                    message: name,
-                    type: "success",
-                });
-                closeModpackModal();
-                updateVersionGrid(); // обновить сетку сборок
-            } else {
-                toast({
-                    title: "Ошибка сохранения",
-                    message: result?.error || "Неизвестная ошибка",
-                    type: "error",
-                });
+            const result = await eel.save_custom_modpack(payload)();
+            if (!result?.ok) {
+                toast({ title: "Ошибка сохранения", message: result?.error || "Неизвестная ошибка", type: "error" });
+                return;
             }
+            toast({
+                title: isManage ? "Описание обновлено" : "Сборка создана",
+                message: result.build?.name || payload.name,
+                type: "success",
+            });
+            closeModpackModal();
+            await updateVersionGrid();
         } catch (e) {
             toast({ title: "Ошибка сохранения", type: "error" });
+        } finally {
+            saveBtn.disabled = false;
         }
     }
 
     async function loadAvailableMods() {
         const version = versionSelect.value;
         const loader = loaderSelect.value;
-        if (!version || !loader) return;
-        resultsEl.innerHTML =
-            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
+        if (!version || !loader || modeInput.value !== "manage") return;
+        resultsEl.innerHTML = '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
         try {
-            const mods = await eel.search_mods(
-                provider,
-                searchInput.value,
-                version,
-                loader,
-                20,
-                "downloads",
-            )();
-            document.getElementById("mods-count-badge").textContent =
-                mods.length;
+            const mods = await eel.search_mods(provider, searchInput.value, version, loader, 20, "downloads")();
+            document.getElementById("mods-count-badge").textContent = mods.length;
             resultsEl.innerHTML =
-                mods
-                    .map(
-                        (m) => `
-                <div class="mod-result-card">
-                    <div class="mod-result-icon">${m.icon ? `<img src="${m.icon}" alt="">` : '<i class="fas fa-cube"></i>'}</div>
+                mods.map((m) => `
+                <div class="mod-result-card" data-url="${escapeHtml(getModrinthUrl(m))}">
+                    <div class="mod-result-icon">${m.icon ? `<img src="${escapeHtml(m.icon)}" alt="">` : '<i class="fas fa-cube"></i>'}</div>
                     <div class="mod-result-info">
-                        <div class="mod-result-name">${m.title}</div>
-                        <div class="mod-result-author">${m.author || ""}</div>
+                        <div class="mod-result-name">${escapeHtml(m.title || "Без названия")}</div>
+                        <div class="mod-result-author">${escapeHtml(m.author || "")}</div>
                         <div class="mod-result-meta">
-                            <span class="mod-result-version">${m.version || "—"}</span>
-                            <span class="mod-result-downloads"><i class="fas fa-download"></i> ${m.downloads || 0}</span>
+                            <span class="mod-result-version">${escapeHtml(version)} / ${escapeHtml(loader)}</span>
+                            <span class="mod-result-downloads"><i class="fas fa-download"></i> ${Number(m.downloads || 0).toLocaleString("ru-RU")}</span>
                         </div>
                     </div>
                     <div class="mod-result-action">
-                        <button class="mod-install-btn" data-id="${m.project_id}">Установить</button>
+                        <button class="mod-link-btn" data-url="${escapeHtml(getModrinthUrl(m))}"><i class="fas fa-arrow-up-right-from-square"></i></button>
+                        <button class="mod-install-btn" data-id="${escapeHtml(m.project_id)}">Установить</button>
                     </div>
-                </div>
-            `,
-                    )
-                    .join("") ||
+                </div>`).join("") ||
                 '<div class="mod-empty"><i class="fas fa-search"></i><p>Ничего не найдено</p></div>';
-
-            // Вешаем обработчики установки
+            
+            resultsEl.querySelectorAll(".mod-result-card").forEach((card) => {
+                card.addEventListener("click", () => openExternalUrl(card.dataset.url));
+            });
+            resultsEl.querySelectorAll(".mod-link-btn").forEach((btn) => {
+                btn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    openExternalUrl(btn.dataset.url);
+                });
+            });
             resultsEl.querySelectorAll(".mod-install-btn").forEach((btn) =>
-                btn.addEventListener("click", async function () {
+                btn.addEventListener("click", async function (e) {
+                    e.stopPropagation();
                     const modId = this.dataset.id;
                     this.textContent = "Установка...";
                     this.disabled = true;
                     try {
-                        const res = await eel.install_mod(
-                            provider,
-                            modId,
-                            version,
-                            version,
-                            loader,
-                        )();
+                        const res = await eel.install_mod(provider, modId, currentManagedBuildId, version, loader)();
                         if (res.ok) {
                             this.textContent = "Установлено";
                             this.classList.add("installed");
-                            loadInstalledMods();
+                            await loadInstalledMods();
                         } else {
                             this.textContent = "Ошибка";
                         }
@@ -2920,57 +2921,49 @@ document.addEventListener("DOMContentLoaded", () => {
                 }),
             );
         } catch (e) {
-            resultsEl.innerHTML =
-                '<div class="mod-empty"><i class="fas fa-exclamation-triangle"></i><p>Ошибка загрузки каталога</p></div>';
+            resultsEl.innerHTML = '<div class="mod-empty"><i class="fas fa-exclamation-triangle"></i><p>Ошибка загрузки каталога</p></div>';
         }
     }
 
     async function loadInstalledMods() {
-        const version = versionSelect.value;
-        if (!version) return;
+        const buildId = currentManagedBuildId || editIdInput.value;
+        if (!buildId) return;
         try {
-            const list = await eel.list_installed_mods(version)();
-            document.getElementById("installed-mods-count").textContent =
-                list.length;
+            const list = await eel.list_installed_mods(buildId)();
+            document.getElementById("installed-mods-count").textContent = list.length;
             installedList.innerHTML =
-                list
-                    .map(
-                        (m) => `
-                <div class="installed-mod-chip">
-                    <span class="chip-icon">${m.icon ? `<img src="${m.icon}">` : '<i class="fas fa-cube"></i>'}</span>
-                    <span>${m.name}</span>
-                    <span class="chip-remove" data-mod="${m.name}" title="Удалить"><i class="fas fa-times"></i></span>
-                </div>
-            `,
-                    )
-                    .join("") ||
-                '<div class="mod-empty"><p>Пока нет установленных модов</p></div>';
+                list.map((m) => {
+                    const cleanName = String(m.name || "").replace(/\.jar$/i, "");
+                    const url = `https://modrinth.com/mods?q=${encodeURIComponent(cleanName)}`;
+                    return `
+                <div class="installed-mod-chip" data-url="${escapeHtml(url)}" title="Открыть поиск Modrinth">
+                    <span class="chip-icon">${m.icon ? `<img src="${escapeHtml(m.icon)}">` : '<i class="fas fa-cube"></i>'}</span>
+                    <span class="chip-name">${escapeHtml(m.name)}</span>
+                    <span class="chip-remove" data-mod="${escapeHtml(m.name)}" title="Удалить"><i class="fas fa-times"></i></span>
+                </div>`;
+                }).join("") || '<div class="mod-empty"><p>Пока нет установленных модов</p></div>';
 
-            // Удаление мода
+            installedList.querySelectorAll(".installed-mod-chip").forEach((chip) =>
+                chip.addEventListener("click", () => openExternalUrl(chip.dataset.url)),
+            );
             installedList.querySelectorAll(".chip-remove").forEach((el) =>
                 el.addEventListener("click", async (e) => {
                     e.stopPropagation();
                     const modName = el.dataset.mod;
                     try {
-                        await eel.delete_installed_mod(version, modName)();
-                        loadInstalledMods();
-                        toast({
-                            title: "Мод удалён",
-                            message: modName,
-                            type: "info",
-                        });
+                        await eel.delete_installed_mod(buildId, modName)();
+                        await loadInstalledMods();
+                        toast({ title: "Мод удалён", message: modName, type: "info" });
                     } catch (err) {
                         toast({ title: "Ошибка удаления", type: "error" });
                     }
                 }),
             );
         } catch (e) {
-            installedList.innerHTML =
-                '<div class="mod-empty"><p>Ошибка загрузки списка</p></div>';
+            installedList.innerHTML = '<div class="mod-empty"><p>Ошибка загрузки списка</p></div>';
         }
     }
 
-    // Вспомогательный debounce
     function debounce(fn, delay) {
         let timer;
         return function (...args) {
@@ -2980,4 +2973,4 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-window.openModpackModal = openModpackModal;
+window.openModpackModal = (...args) => openModpackModal?.(...args);

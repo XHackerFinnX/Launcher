@@ -88,6 +88,23 @@ def create_table_themes(conn):
         conn.commit()
     except sqlite3.Error as e:
         print(f"Ошибка при создании таблицы themes: {e}")
+        
+def create_table_custom_modpacks(conn):
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS custom_modpacks (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            build_id TEXT NOT NULL UNIQUE,
+                            name TEXT NOT NULL UNIQUE,
+                            description TEXT DEFAULT '',
+                            game_version TEXT NOT NULL,
+                            loader TEXT NOT NULL,
+                            provider TEXT DEFAULT 'modrinth',
+                            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TEXT DEFAULT CURRENT_TIMESTAMP)''')
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"Ошибка при создании таблицы custom_modpacks: {e}")
 
 def apply_migrations(conn):
     cursor = conn.cursor()
@@ -163,5 +180,6 @@ def init_database(db_file):
     create_table_time(conn)
     create_table_versions_launcher(conn)
     create_table_themes(conn)
+    create_table_custom_modpacks(conn)
     apply_migrations(conn)
     conn.close()
