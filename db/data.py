@@ -16,6 +16,7 @@ from urllib.parse import urljoin
 import urllib.error
 import urllib.request
 from typing import Any, Callable, Dict, Optional
+from functools import lru_cache
 
 from db.database import create_connection
 from db.tunnel_agent import TunnelAgent, RelayClientProxy, relay_smoke_test
@@ -945,6 +946,23 @@ def get_account_by_login(login, include_token=False):
 
 def get_account_for_launch(login):
     return get_account_by_login(login, include_token=True)
+
+@lru_cache(maxsize=128)
+def _cached_ely_skin_face(login):
+    return ely.skin_face_data_uri(login)
+
+
+@eel.expose
+def get_ely_skin_face(login):
+    """Возвращает вырезанное лицо Minecraft-скина Ely.by как PNG data URI."""
+    login = str(login or "").strip()
+    if not is_valid_login(login):
+        return {"ok": False, "error": "Некорректный ник Minecraft"}
+    try:
+        return {"ok": True, "face": _cached_ely_skin_face(login)}
+    except Exception as exc:
+        logger.exception("Не удалось получить лицо скина Ely.by для %s", login)
+        return {"ok": False, "error": str(exc) or "Не удалось получить лицо скина"}
 
 @eel.expose
 def update_account_version(login, version):

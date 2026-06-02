@@ -127,3 +127,48 @@ def ensure_authlib_injector() -> str:
                     file.write(chunk)
         tmp_path.replace(AUTHLIB_PATH)
     return str(AUTHLIB_PATH)
+
+def skin_face_data_uri(username: str, size: int = 128) -> str:
+    """Download an Ely.by skin and return the Minecraft face as a PNG data URI.
+
+    The browser should not crop Ely.by skins with canvas because the remote
+    server can taint the canvas without CORS headers. Cropping on the Python
+    side keeps the UI independent of CORS and lets it render the final face as
+    a normal image source.
+    """
+    safe_name = str(username or "").strip()
+    if not safe_name:
+        return ""
+
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise RuntimeError("Для отображения лица Minecraft-скина установите Pillow") from exc
+
+    from base64 import b64encode
+    from io import BytesIO
+
+    response = requests.get(
+        skin_url(safe_name),
+        timeout=REQUEST_TIMEOUT,
+        headers={"User-Agent": "StoneLauncher/1.0"},
+    )
+    response.raise_for_status()
+
+    with Image.open(BytesIO(response.content)) as skin_image:
+        skin = skin_image.convert("RGBA")
+
+    if skin.width < 16 or skin.height < 16:
+        raise RuntimeError("Ely.by вернул слишком маленький файл скина")
+
+    face = skin.crop((8, 8, 16, 16))
+    if skin.width >= 48:
+        overlay = skin.crop((40, 8, 48, 16))
+        face.alpha_composite(overlay)
+
+    resampling = getattr(Image, "Resampling", Image).NEAREST
+    face = face.resize((int(size), int(size)), resampling)
+
+    output = BytesIO()
+    face.save(output, format="PNG")
+    return "data:image/png;base64," + b64encode(output.getvalue()).decode("ascii")

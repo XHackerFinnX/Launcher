@@ -501,6 +501,7 @@ let externalLogsOpened = false;
 let openLogViewerEnabled = true;
 let launcherAccounts = [];
 let launcherVersions = [];
+const skinFaceCache = new Map();
 const DEFAULT_STEVE_FACE = `data:image/png;base64,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`;
 
 function escapeHtml(value) {
@@ -537,18 +538,34 @@ function accountSkinUrl(account) {
 function makeAvatar(account, className = "") {
     const avatar = document.createElement("span");
     const type = accountType(account);
-    avatar.className = `${className} ${type === "ely" ? "ely" : "offline"}`.trim();
+    const name = accountName(account);
+    avatar.className =
+        `${className} ${type === "ely" ? "ely" : "offline"}`.trim();
 
     const img = document.createElement("img");
-    img.alt = accountName(account) || "Steve";
-    img.src = type === "ely" ? accountSkinUrl(account) : DEFAULT_STEVE_FACE;
-    img.onerror = () => {
-        avatar.classList.remove("ely");
-        avatar.classList.add("offline");
-        img.onerror = null;
-        img.src = DEFAULT_STEVE_FACE;
-    };
+    img.alt = name || "Steve";
+    img.src = DEFAULT_STEVE_FACE;
     avatar.appendChild(img);
+    if (type !== "ely" || !name) return avatar;
+
+    const cachedFace = skinFaceCache.get(name);
+    if (cachedFace) {
+        img.src = cachedFace;
+        return avatar;
+    }
+
+    eel.get_ely_skin_face(name)()
+        .then((result) => {
+            if (!result?.ok || !result.face)
+                throw new Error(result?.error || "skin_face_error");
+            skinFaceCache.set(name, result.face);
+            img.src = result.face;
+        })
+        .catch(() => {
+            avatar.classList.remove("ely");
+            avatar.classList.add("offline");
+            img.src = DEFAULT_STEVE_FACE;
+        });
     return avatar;
 }
 
@@ -590,7 +607,9 @@ function setupLauncherCombos() {
     document.querySelectorAll(".combo-add-account").forEach((button) => {
         button.addEventListener("click", () => {
             closeLauncherCombos();
-            const menuItem = document.querySelector('.menu-item[data-section="accounts"]');
+            const menuItem = document.querySelector(
+                '.menu-item[data-section="accounts"]',
+            );
             if (menuItem) menuItem.click();
         });
     });
@@ -604,10 +623,15 @@ function renderAccountCombo() {
     const selectedAccount = launcherAccounts.find(
         (account) => accountName(account) === selected,
     );
-    updateComboToggle("account", selected || "Выберите аккаунт", selectedAccount);
+    updateComboToggle(
+        "account",
+        selected || "Выберите аккаунт",
+        selectedAccount,
+    );
 
     if (launcherAccounts.length === 0) {
-        box.innerHTML = '<div class="empty-state"><i class="fas fa-user-slash"></i><div>Аккаунтов нет</div></div>';
+        box.innerHTML =
+            '<div class="empty-state"><i class="fas fa-user-slash"></i><div>Аккаунтов нет</div></div>';
         return;
     }
 
@@ -620,10 +644,10 @@ function renderAccountCombo() {
         option.appendChild(makeAvatar(account, "combo-avatar"));
         const main = document.createElement("span");
         main.className = "combo-option-main";
-        main.innerHTML = `<span class="combo-option-name">${escapeHtml(name)}</span><span class="combo-option-subtitle">${type === "ely" ? "Ely.by skin account" : "Offline"}</span>`;
+        main.innerHTML = `<span class="combo-option-name">${escapeHtml(name)}</span><span class="combo-option-subtitle">${type === "ely" ? "Ely.by" : "Offline"}</span>`;
         const more = document.createElement("span");
         more.className = "combo-option-more";
-        more.innerHTML = '<i class="fas fa-ellipsis"></i>';
+        // more.innerHTML = '<i class="fas fa-ellipsis"></i>';
         option.appendChild(main);
         option.appendChild(more);
         option.addEventListener("click", () => {
@@ -641,10 +665,14 @@ function renderVersionCombo() {
     if (!box) return;
     box.innerHTML = "";
     const selected = versionSelect?.value || "";
-    updateComboToggle("version", selected ? `Версия ${selected}` : "Выберите версию");
+    updateComboToggle(
+        "version",
+        selected ? `Версия ${selected}` : "Выберите версию",
+    );
 
     if (launcherVersions.length === 0) {
-        box.innerHTML = '<div class="empty-state"><i class="fas fa-cubes"></i><div>Версий нет</div></div>';
+        box.innerHTML =
+            '<div class="empty-state"><i class="fas fa-cubes"></i><div>Версий нет</div></div>';
         return;
     }
 
@@ -1351,19 +1379,27 @@ document.addEventListener("DOMContentLoaded", () => {
             nameNode.textContent = name;
             const badge = document.createElement("span");
             badge.className = `account-badge ${type === "ely" ? "ely" : "offline"}`;
-            badge.innerHTML = type === "ely" ? '<i class="fas fa-shield-halved"></i> Ely.by' : '<i class="fas fa-user"></i> Offline';
+            badge.innerHTML =
+                type === "ely"
+                    ? '<i class="fas fa-shield-halved"></i> Ely.by'
+                    : '<i class="fas fa-user"></i> Offline';
             nameRow.appendChild(nameNode);
             nameRow.appendChild(badge);
             const subtitle = document.createElement("div");
             subtitle.className = "account-subtitle";
-            subtitle.textContent = type === "ely" ? "Скин загружается из Ely.by" : "Обычный аккаунт со Steve-иконкой";
+            subtitle.textContent =
+                type === "ely"
+                    ? "Скин загружается из Ely.by"
+                    : "Обычный аккаунт со Steve-иконкой";
             meta.appendChild(nameRow);
             meta.appendChild(subtitle);
 
             accountItem.addEventListener("click", () => {
                 accountSelect.value = name;
                 accountSelect.dispatchEvent(new Event("change"));
-                document.querySelectorAll(".account-item.selected").forEach((item) => item.classList.remove("selected"));
+                document
+                    .querySelectorAll(".account-item.selected")
+                    .forEach((item) => item.classList.remove("selected"));
                 accountItem.classList.add("selected");
             });
 
@@ -1436,7 +1472,8 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         addElyAccountBtn.disabled = true;
-        addElyAccountBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Авторизация...';
+        addElyAccountBtn.innerHTML =
+            '<i class="fas fa-spinner fa-spin"></i> Авторизация...';
         try {
             const result = await eel.add_ely_account(username, password)();
             if (!result?.ok) {
@@ -1457,7 +1494,8 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         } finally {
             addElyAccountBtn.disabled = false;
-            addElyAccountBtn.innerHTML = '<i class="fas fa-right-to-bracket"></i> Войти через Ely.by';
+            addElyAccountBtn.innerHTML =
+                '<i class="fas fa-right-to-bracket"></i> Войти через Ely.by';
         }
     });
 

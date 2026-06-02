@@ -3766,11 +3766,5 @@ html {
 
 .account-avatar.ely img,
 .combo-avatar.ely img {
-    width: 800%;
-    height: 800%;
-    max-width: none;
-    object-fit: fill;
-    object-position: initial;
-    transform: translate(-12.5%, -12.5%);
-    transform-origin: top left;
+    image-rendering: pixelated;
 }

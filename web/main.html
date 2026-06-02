@@ -310,25 +310,15 @@
                                 Выберите модпак или версию с модами
                             </p>
                         </div>
-                        <div class="page-actions">
-                            <div class="search-wrapper">
-                                <i class="fas fa-search"></i>
-                                <input
-                                    type="text"
-                                    class="search-input"
-                                    id="builds-search"
-                                    placeholder="Поиск сборки…"
-                                />
-                            </div>
-                        </div>
                     </div>
                     <div
                         style="
                             display: flex;
                             flex-direction: row;
                             align-items: center;
-                            justify-content: space-between;
+                            justify-content: flex-start;
                             margin-bottom: 20px;
+                            gap: 14px;
                         "
                     >
                         <div class="filter-tabs" id="builds-filter">
@@ -351,9 +341,20 @@
                                 <span class="count" data-count="fabric">0</span>
                             </button>
                         </div>
-                        <button class="btn-primary" id="open-modpack-creator">
-                            <i class="fas fa-plus"></i> Создать сборку
-                        </button>
+                        <div class="page-actions">
+                            <div class="search-wrapper">
+                                <i class="fas fa-search"></i>
+                                <input type="text" class="search-input" id="builds-search" placeholder="Поиск сборки…">
+                            </div>
+                        </div>
+                        <div>
+                            <button class="btn-primary" id="open-modpack-creator">
+                                <div>
+                                    <i class="fas fa-plus"></i> Создать сборку
+                                    <!-- <span style="font-size: 11px; color: var(--on-accent)">(в разработке)</span> -->
+                                </div>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="versions-grid"></div>

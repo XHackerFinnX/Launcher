@@ -3,3 +3,4 @@ eel
 minecraft_launcher_lib
 psutil
 auto-py-to-exe
+Pillow
