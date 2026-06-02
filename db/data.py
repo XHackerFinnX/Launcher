@@ -21,6 +21,7 @@ from db.database import create_connection
 from db.tunnel_agent import TunnelAgent, RelayClientProxy, relay_smoke_test
 from utils.config import minecraft_directory, VERSIONS_LAUNCHER
 from utils.validators import is_valid_login, is_valid_server_address
+from utils import ely
 
 db_path = r"C:\.stoneworld\db\launcher.db"
 log_path = r"C:\.stoneworld\logs\launcher.log"
@@ -765,23 +766,146 @@ def get_versions():
     
 @eel.expose
 def insert_account(login):
-    """Добавление нового аккаунта в таблицу."""
+    """Добавление нового offline-аккаунта в таблицу."""
+    login = str(login or "").strip()
     if not is_valid_login(login):
         logger.warning("Отклонен некорректный логин: %s", login)
         return False
     conn = create_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute('''INSERT OR IGNORE INTO accounts (login) VALUES (?)''', (login,))
+    cursor.execute(
+        """INSERT OR IGNORE INTO accounts
+           (login, choose, account_type, uuid, access_token, client_token, skin_url, profile_json)
+           VALUES (?, 0, 'offline', '', '', '', '', '{}')""",
+        (login,),
+    )
+    inserted = cursor.rowcount > 0
     conn.commit()
     conn.close()
-    return True
+    return inserted
+
+def _account_row_to_dict(row):
+    return {
+        "id": row[0],
+        "login": row[1],
+        "choose": row[2] or 0,
+        "account_type": row[3] or "offline",
+        "uuid": row[4] or "",
+        "access_token": row[5] or "",
+        "client_token": row[6] or "",
+        "skin_url": (row[7] or "").replace(
+            "https://skinsystem.ely.by", "http://skinsystem.ely.by"
+        ),
+        "profile_json": row[8] or "{}",
+    }
+
+
+def _selected_profile_from_ely_response(data: dict) -> dict:
+    profile = data.get("selectedProfile") or {}
+    if not profile:
+        profiles = data.get("availableProfiles") or []
+        profile = profiles[0] if profiles else {}
+    return profile
+
+
+@eel.expose
+def add_ely_account(username, password):
+    """Авторизует Ely.by-аккаунт и сохраняет токен без хранения пароля."""
+    username = str(username or "").strip()
+    password = str(password or "")
+    if not username or not password:
+        return {"ok": False, "error": "Укажите логин и пароль Ely.by"}
+
+    client_token = str(uuid.uuid4())
+    try:
+        auth_data = ely.authenticate(username, password, client_token)
+        profile = _selected_profile_from_ely_response(auth_data)
+        login = str(profile.get("name") or username).strip()
+        profile_uuid = str(profile.get("id") or "").strip()
+        access_token = str(auth_data.get("accessToken") or "").strip()
+        if not login or not access_token:
+            return {"ok": False, "error": "Ely.by не вернул профиль игрока"}
+        if not is_valid_login(login):
+            return {"ok": False, "error": "Ник Ely.by не подходит под формат Minecraft"}
+
+        skin = ely.skin_url(login)
+        conn = create_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""UPDATE accounts SET choose = 0""")
+        cursor.execute(
+            """INSERT INTO accounts
+               (login, choose, account_type, uuid, access_token, client_token, skin_url, profile_json)
+               VALUES (?, 1, 'ely', ?, ?, ?, ?, ?)
+               ON CONFLICT(login) DO UPDATE SET
+                   account_type='ely',
+                   uuid=excluded.uuid,
+                   access_token=excluded.access_token,
+                   client_token=excluded.client_token,
+                   skin_url=excluded.skin_url,
+                   profile_json=excluded.profile_json,
+                   choose=1""",
+            (
+                login,
+                profile_uuid,
+                access_token,
+                client_token,
+                skin,
+                json.dumps(auth_data, ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return {
+            "ok": True,
+            "account": {
+                "login": login,
+                "account_type": "ely",
+                "uuid": profile_uuid,
+                "skin_url": skin,
+            },
+        }
+    except Exception as exc:
+        logger.exception("Ошибка авторизации Ely.by")
+        return {"ok": False, "error": str(exc) or "Ошибка авторизации Ely.by"}
+
+
+@eel.expose
+def refresh_ely_account(login):
+    account = get_account_by_login(login, include_token=True)
+    if not account or account.get("account_type") != "ely":
+        return {"ok": False, "error": "ely_account_not_found"}
+    try:
+        data = ely.refresh(account.get("access_token") or "", account.get("client_token") or "")
+        profile = _selected_profile_from_ely_response(data)
+        new_login = str(profile.get("name") or account.get("login") or "").strip()
+        access_token = str(data.get("accessToken") or account.get("access_token") or "").strip()
+        conn = create_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """UPDATE accounts SET login=?, uuid=?, access_token=?, skin_url=?, profile_json=?
+               WHERE id=?""",
+            (
+                new_login,
+                str(profile.get("id") or account.get("uuid") or ""),
+                access_token,
+                ely.skin_url(new_login),
+                json.dumps(data, ensure_ascii=False),
+                account["id"],
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return {"ok": True, "login": new_login, "skin_url": ely.skin_url(new_login)}
+    except Exception as exc:
+        logger.exception("Не удалось обновить Ely.by токен")
+        return {"ok": False, "error": str(exc)}
 
 @eel.expose
 def delete_account(login):
     """Удаление аккаунта из базы данных."""
     conn = create_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute('''DELETE FROM accounts WHERE login = ?''', (login,))
+    cursor.execute("""DELETE FROM accounts WHERE login = ?""", (login,))
     conn.commit()
     conn.close()
 
@@ -790,10 +914,37 @@ def get_accounts():
     """Получение всех аккаунтов из базы данных."""
     conn = create_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute('''SELECT * FROM accounts''')
-    account_list = cursor.fetchall()
+    cursor.execute(
+        """SELECT id, login, choose, account_type, uuid, access_token, client_token, skin_url, profile_json
+           FROM accounts
+           ORDER BY choose DESC, account_type DESC, login COLLATE NOCASE"""
+    )
+    account_list = [_account_row_to_dict(row) for row in cursor.fetchall()]
     conn.close()
+    for account in account_list:
+        account.pop("access_token", None)
     return account_list
+
+def get_account_by_login(login, include_token=False):
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT id, login, choose, account_type, uuid, access_token, client_token, skin_url, profile_json
+           FROM accounts WHERE login = ?""",
+        (login,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    account = _account_row_to_dict(row)
+    if not include_token:
+        account.pop("access_token", None)
+    return account
+
+
+def get_account_for_launch(login):
+    return get_account_by_login(login, include_token=True)
 
 @eel.expose
 def update_account_version(login, version):

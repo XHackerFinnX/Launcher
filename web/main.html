@@ -699,12 +699,19 @@
                         </div>
                     </div>
 
-                    <div class="accounts-container">
-                        <div class="accounts-form">
+                    <div class="accounts-container accounts-container-modern">
+                        <div class="accounts-form accounts-panel">
+                            <div class="accounts-panel-header">
+                                <div>
+                                    <h3>Offline аккаунт</h3>
+                                    <p>Быстрый вход по нику без авторизации.</p>
+                                </div>
+                                <span class="account-type-chip offline">
+                                    <i class="fas fa-user"></i> Offline
+                                </span>
+                            </div>
                             <div class="input-group">
-                                <label class="form-label" for="login"
-                                    >Никнейм</label
-                                >
+                                <label class="form-label" for="login">Никнейм</label>
                                 <input
                                     type="text"
                                     id="login"
@@ -713,18 +720,56 @@
                                     autocomplete="off"
                                 />
                                 <p class="input-helper">
-                                    3–16 символов: латиница, цифры и нижнее
-                                    подчёркивание
+                                    3–16 символов: латиница, цифры и нижнее подчёркивание.
                                 </p>
                             </div>
                             <button class="add-account-btn">
                                 <i class="fas fa-user-plus"></i>
-                                Добавить аккаунт
+                                Добавить offline
                             </button>
                         </div>
-                        <div class="accounts-list">
+
+                        <div class="accounts-form accounts-panel ely-panel">
+                            <div class="accounts-panel-header">
+                                <div>
+                                    <h3>Ely.by аккаунт</h3>
+                                    <p>Скины Ely.by, authlib-injector и локальный CustomSkinLoader для серверов.</p>
+                                </div>
+                                <span class="account-type-chip ely">
+                                    <i class="fas fa-shield-halved"></i> Ely.by
+                                </span>
+                            </div>
+                            <div class="input-group">
+                                <label class="form-label" for="ely-login">Логин или e-mail Ely.by</label>
+                                <input
+                                    type="text"
+                                    id="ely-login"
+                                    class="account-input"
+                                    placeholder="Ваш аккаунт Ely.by"
+                                    autocomplete="username"
+                                />
+                            </div>
+                            <div class="input-group">
+                                <label class="form-label" for="ely-password">Пароль</label>
+                                <input
+                                    type="password"
+                                    id="ely-password"
+                                    class="account-input"
+                                    placeholder="Пароль не сохраняется"
+                                    autocomplete="current-password"
+                                />
+                                <p class="input-helper">
+                                    Лаунчер сохранит только access token, а для Forge/Fabric автоматически поставит skin-мод.
+                                </p>
+                            </div>
+                            <button class="add-ely-account-btn">
+                                <i class="fas fa-right-to-bracket"></i>
+                                Войти через Ely.by
+                            </button>
+                        </div>
+                        <div class="accounts-list accounts-panel accounts-roster">
                             <div class="accounts-list-header">
-                                <span>Список</span>
+                                <span>Список аккаунтов</span>
                                 <span
                                     class="accounts-list-count"
                                     id="accounts-count"
@@ -1394,11 +1439,36 @@
 
         <!-- ==================== BOTTOM PLAY BAR ==================== -->
         <div class="bottom-panel">
-            <select class="account-select" title="Аккаунт">
+            <div class="launcher-combo account-combo" data-combo="account">
+                <button class="launcher-combo-toggle" type="button">
+                    <span class="combo-avatar combo-account-avatar"></span>
+                    <span class="combo-title">Выберите аккаунт</span>
+                    <i class="fas fa-chevron-up combo-chevron"></i>
+                </button>
+                <div class="launcher-combo-menu account-combo-menu">
+                    <div class="combo-menu-title"><i class="far fa-star"></i> Аккаунты:</div>
+                    <div class="combo-options account-combo-options"></div>
+                    <!-- <button class="combo-add-account" type="button" data-jump-section="accounts">
+                        <i class="fas fa-user-plus"></i> + Добавить аккаунт
+                    </button> -->
+                </div>
+            </div>
+            <select class="account-select native-hidden-select" title="Аккаунт">
                 <option value="">Выберите аккаунт</option>
             </select>
+            <div class="launcher-combo version-combo" data-combo="version">
+                <button class="launcher-combo-toggle" type="button">
+                    <span class="combo-version-icon"><i class="fas fa-cubes"></i></span>
+                    <span class="combo-title">Выберите версию</span>
+                    <i class="fas fa-chevron-up combo-chevron"></i>
+                </button>
+                <div class="launcher-combo-menu version-combo-menu">
+                    <div class="combo-menu-title"><i class="fas fa-download"></i> Версии:</div>
+                    <div class="combo-options version-combo-options"></div>
+                </div>
+            </div>
             <select
-                class="version-select"
+                class="version-select native-hidden-select"
                 onchange="toggleServerSelect()"
                 title="Версия"
             >

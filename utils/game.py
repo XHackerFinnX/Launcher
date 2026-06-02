@@ -8,8 +8,10 @@ import eel
 import threading
 import logging
 
-from uuid import uuid1
-from db.data import get_memory, get_checkbox, get_bit_optimiz_argument
+from uuid import NAMESPACE_DNS, uuid3
+from db.data import get_memory, get_checkbox, get_bit_optimiz_argument, get_account_for_launch, refresh_ely_account
+from utils import ely
+from utils.skin_mod import ensure_client_skin_support, install_custom_skin_loader
 from utils.config import minecraft_directory, CREATE_NO_WINDOW
 from utils.java_finder import find_java_8
 
@@ -54,6 +56,52 @@ def _update_ui_progress(progress: int):
         eel.updateProgressDownload(progress)
     except Exception:
         logger.debug("Не удалось обновить прогресс в UI", exc_info=True)
+        
+def _offline_uuid(login: str) -> str:
+    return str(uuid3(NAMESPACE_DNS, f"OfflinePlayer:{login}"))
+
+
+def _build_launch_options(login: str):
+    account = get_account_for_launch(login) or {}
+    account_type = account.get("account_type") or "offline"
+    if account_type == "ely":
+        token = account.get("access_token") or ""
+        client_token = account.get("client_token") or ""
+        if token and client_token:
+            try:
+                if not ely.validate(token):
+                    refresh_result = refresh_ely_account(login)
+                    if refresh_result.get("ok"):
+                        account = get_account_for_launch(refresh_result.get("login") or login) or account
+            except Exception:
+                logger.warning("Не удалось проверить Ely.by токен перед запуском", exc_info=True)
+        return {
+            "username": account.get("login") or login,
+            "uuid": account.get("uuid") or _offline_uuid(login),
+            "token": account.get("access_token") or "",
+            "account_type": "ely",
+            "skin_url": account.get("skin_url") or ely.skin_url(account.get("login") or login),
+        }
+    return {
+        "username": login,
+        "uuid": account.get("uuid") or _offline_uuid(login),
+        "token": "0",
+        "account_type": "offline",
+    }
+
+
+def _prepend_ely_authlib_argument(options: dict):
+    authlib_path = ely.ensure_authlib_injector()
+    javaagent = f"-javaagent:{authlib_path}=ely.by"
+    ssl_arguments = ["-Djava.net.preferIPv4Stack=true"]
+    if os.name == "nt":
+        ssl_arguments = [
+            "-Djavax.net.ssl.trustStoreType=Windows-ROOT",
+            "-Dcom.sun.net.ssl.checkRevocation=false",
+            *ssl_arguments,
+        ]
+    arguments = options.get("jvmArguments") or []
+    options["jvmArguments"] = [*ssl_arguments, javaagent, *arguments]
 
 def run_minecraft(login: str, version: str, server: str):
     time.sleep(0.8)
@@ -61,11 +109,10 @@ def run_minecraft(login: str, version: str, server: str):
     _update_ui_progress(5)
     logger.info("Запуск Minecraft: login=%s version=%s server=%s", login, version, server or "-")
     try:
-        options = {
-            'username': login,
-            'uuid': str(uuid1()),
-            'token': '1234322354543342'
-        }
+        account_options = _build_launch_options(login)
+        account_type = account_options.pop("account_type", "offline")
+        skin_url = account_options.pop("skin_url", "")
+        options = account_options
         bit_checkbox, optimiz_checkbox, argument = get_bit_optimiz_argument()
         time.sleep(0.8)
         _set_state(STATE_STARTING, progress=20)
@@ -90,8 +137,33 @@ def run_minecraft(login: str, version: str, server: str):
         
         else:
             options["jvmArguments"] = argument.split(' ')
+            
+        if account_type == "ely":
+            _prepend_ely_authlib_argument(options)
         
         minecraft_directory_version = minecraft_directory + f"\\{version}"
+        try:
+            if account_type == "ely":
+                skin_result = ensure_client_skin_support(
+                    version,
+                    minecraft_directory_version,
+                    options.get("username") or login,
+                    skin_url,
+                )
+            else:
+                skin_result = install_custom_skin_loader(version, minecraft_directory_version)
+            if skin_result.get("ok"):
+                logger.info(
+                    "CustomSkinLoader установлен: version=%s loader=%s mod=%s local_skin=%s",
+                    version,
+                    skin_result.get("loader"),
+                    skin_result.get("name"),
+                    (skin_result.get("local_skin") or {}).get("name"),
+                )
+            elif not skin_result.get("skipped"):
+                logger.warning("Не удалось установить CustomSkinLoader: %s", skin_result)
+        except Exception:
+            logger.warning("Не удалось подготовить client-side skin mod", exc_info=True)
         path = minecraft_directory_version + f"\\versions"
         time.sleep(0.8)
         _set_state(STATE_STARTING, progress=35)

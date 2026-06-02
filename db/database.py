@@ -23,7 +23,13 @@ def create_table_accounts(conn):
         cursor.execute('''CREATE TABLE IF NOT EXISTS accounts (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             login TEXT NOT NULL,
-                            choose INTEGER)''')
+                            choose INTEGER,
+                            account_type TEXT DEFAULT 'offline',
+                            uuid TEXT DEFAULT '',
+                            access_token TEXT DEFAULT '',
+                            client_token TEXT DEFAULT '',
+                            skin_url TEXT DEFAULT '',
+                            profile_json TEXT DEFAULT '{}')''')
         conn.commit()
     except sqlite3.Error as e:
         print(f"Ошибка при создании таблицы accounts: {e}")
@@ -168,6 +174,27 @@ def apply_migrations(conn):
         if "theme_json" not in columns:
             cursor.execute("ALTER TABLE themes ADD COLUMN theme_json TEXT DEFAULT '{}'")
         cursor.execute("PRAGMA user_version = 4")
+        conn.commit()
+        
+    if version < 5:
+        cursor.execute("PRAGMA table_info(accounts)")
+        columns = {row[1] for row in cursor.fetchall()}
+        account_columns = {
+            "account_type": "TEXT DEFAULT 'offline'",
+            "uuid": "TEXT DEFAULT ''",
+            "access_token": "TEXT DEFAULT ''",
+            "client_token": "TEXT DEFAULT ''",
+            "skin_url": "TEXT DEFAULT ''",
+            "profile_json": "TEXT DEFAULT '{}'",
+        }
+        for column, definition in account_columns.items():
+            if column not in columns:
+                cursor.execute(f"ALTER TABLE accounts ADD COLUMN {column} {definition}")
+        cursor.execute(
+            "UPDATE accounts SET account_type = 'offline' "
+            "WHERE account_type IS NULL OR account_type = ''"
+        )
+        cursor.execute("PRAGMA user_version = 5")
         conn.commit()
 
 

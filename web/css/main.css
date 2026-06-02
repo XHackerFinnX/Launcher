@@ -581,7 +581,7 @@ select {
     );
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-lg);
-    padding: 28px;
+    padding: 24px;
     margin-bottom: 28px;
     position: relative;
     overflow: hidden;
@@ -734,7 +734,7 @@ select {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 16px;
+    padding: 14px;
     transition: all var(--transition);
 }
 
@@ -1260,7 +1260,7 @@ select {
 
 .accounts-container {
     display: grid;
-    grid-template-columns: 1fr 320px;
+    /* grid-template-columns: 1fr 320px; */
     gap: 20px;
     max-width: 900px;
 }
@@ -1269,10 +1269,10 @@ select {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 24px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 12px;
 }
 
 .form-label {
@@ -1329,6 +1329,7 @@ select {
     gap: 8px;
     width: fit-content;
     box-shadow: 0 4px 12px var(--accent-border);
+    margin-top: auto;
 }
 
 .add-account-btn:hover {
@@ -1368,7 +1369,7 @@ select {
 }
 
 .account-items {
-    padding: 8px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -1462,7 +1463,7 @@ select {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 20px 22px;
+    padding: 14px;
     transition: all var(--transition);
 }
 
@@ -2363,7 +2364,7 @@ input:checked + .slider:before {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 20px;
+    padding: 14px;
     display: flex;
     gap: 16px;
     align-items: flex-start;
@@ -3387,4 +3388,389 @@ html {
     .modpack-mods-layout {
         grid-template-columns: 1fr;
     }
+}
+
+/* ============================================
+   Ely.by accounts + launcher combo selects
+   ============================================ */
+.accounts-container-modern {
+    /* grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr) 360px; */
+    align-items: stretch;
+}
+
+.accounts-panel {
+    background: linear-gradient(180deg, var(--panel) 0%, var(--bg-2) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+}
+
+.accounts-panel-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.accounts-panel-header h3 {
+    color: var(--text);
+    font-size: 16px;
+    margin-bottom: 5px;
+}
+
+.accounts-panel-header p {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.account-type-chip {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.account-type-chip.offline {
+    color: var(--text-muted);
+    background: var(--white-06);
+    border: 1px solid var(--border);
+}
+
+.account-type-chip.ely {
+    color: #c9efff;
+    background: var(--info-bg-soft);
+    border: 1px solid rgba(79, 195, 247, 0.25);
+}
+
+.ely-panel {
+    position: relative;
+    overflow: hidden;
+}
+
+.ely-panel::before {
+    content: "";
+    position: absolute;
+    inset: -80px -70px auto auto;
+    width: 180px;
+    height: 180px;
+    background: radial-gradient(
+        circle,
+        rgba(79, 195, 247, 0.18),
+        transparent 68%
+    );
+    pointer-events: none;
+}
+
+.add-ely-account-btn {
+    background: linear-gradient(135deg, #35b7ff 0%, #5773ff 100%);
+    color: #ffffff;
+    padding: 11px 18px;
+    margin-top: auto;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 700;
+    transition: all var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    box-shadow: 0 4px 14px rgba(79, 195, 247, 0.28);
+}
+
+.add-ely-account-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(79, 195, 247, 0.34);
+}
+
+.account-items {
+    max-height: 485px;
+}
+
+.account-item {
+    position: relative;
+    padding: 10px;
+    border: 1px solid transparent;
+}
+
+.account-item.selected {
+    background: var(--accent-bg-soft);
+    border-color: var(--accent-border);
+}
+
+.account-avatar {
+    overflow: hidden;
+    background: var(--bg-deep);
+    border: 1px solid var(--border-strong);
+}
+
+.account-avatar img,
+.combo-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    image-rendering: pixelated;
+}
+
+/* .account-avatar.offline,
+.combo-avatar.offline {
+    background: linear-gradient(
+        180deg,
+        #7fb86e 0 42%,
+        #4eb6e9 42% 72%,
+        #2350a5 72%
+    );
+} */
+
+.account-meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.account-name-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+
+.account-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.account-badge.ely {
+    color: #bdefff;
+    background: var(--info-bg-soft);
+}
+
+.account-badge.offline {
+    color: var(--text-dim);
+    background: var(--white-06);
+}
+
+.account-subtitle {
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
+.native-hidden-select {
+    display: none !important;
+}
+
+.launcher-combo {
+    position: relative;
+    min-width: 210px;
+    flex-shrink: 0;
+}
+
+.launcher-combo-toggle {
+    height: 52px;
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    transition: all var(--transition);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.launcher-combo.open .launcher-combo-toggle,
+.launcher-combo-toggle:hover {
+    background: var(--panel-hover);
+    border-color: var(--border-strong);
+}
+
+.combo-title {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.combo-chevron {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: transform var(--transition);
+}
+
+.launcher-combo.open .combo-chevron {
+    transform: rotate(180deg);
+}
+
+.combo-avatar,
+.combo-version-icon {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    border-radius: 8px;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    background: var(--bg-deep);
+    border: 1px solid var(--border-strong);
+}
+
+.combo-version-icon {
+    background: var(--white-06);
+}
+
+.launcher-combo-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);
+    width: min(340px, 90vw);
+    max-height: 460px;
+    padding: 10px;
+    border-radius: 14px;
+    background: rgba(17, 20, 28, 0.98);
+    border: 1px solid var(--border-strong);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(10px) scale(0.98);
+    transition: all 0.18s ease;
+    z-index: 200;
+}
+
+.version-combo-menu {
+    width: min(310px, 90vw);
+}
+
+.launcher-combo.open .launcher-combo-menu {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+.combo-menu-title {
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 800;
+    padding: 4px 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.combo-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 340px;
+    overflow-y: auto;
+    padding-right: 3px;
+}
+
+.combo-option {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 8px;
+    border-radius: 10px;
+    color: var(--text-muted);
+    transition: all var(--transition);
+}
+
+.combo-option:hover,
+.combo-option.selected {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+}
+
+.combo-option.selected {
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.combo-option-main {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+}
+
+.combo-option-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.combo-option-subtitle {
+    color: var(--text-dim);
+    font-size: 10px;
+}
+
+.combo-option-more {
+    color: var(--text-dim);
+    padding: 4px;
+}
+
+.combo-add-account {
+    width: 100%;
+    margin-top: 10px;
+    background: linear-gradient(135deg, #1373ff 0%, #057cff 100%);
+    color: #fff;
+    min-height: 42px;
+    border-radius: 10px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+@media (max-width: 1100px) {
+    .accounts-container-modern {
+        grid-template-columns: 1fr;
+    }
+
+    .accounts-roster {
+        min-height: 360px;
+    }
+}
+
+.account-avatar.ely img,
+.combo-avatar.ely img {
+    width: 800%;
+    height: 800%;
+    max-width: none;
+    object-fit: fill;
+    object-position: initial;
+    transform: translate(-12.5%, -12.5%);
+    transform-origin: top left;
 }

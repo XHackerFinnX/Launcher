@@ -487,6 +487,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // ---------- Bottom panel: version / play ----------
 const versionSelect = document.querySelector(".version-select");
+const accountSelect = document.querySelector(".account-select");
 const serverSelect = document.querySelector(".server-select");
 const playBtn = document.querySelector(".play-btn");
 let downloadButtons = document.querySelectorAll(".download-btn");
@@ -498,6 +499,179 @@ let logPollTimer = null;
 let logPosition = 0;
 let externalLogsOpened = false;
 let openLogViewerEnabled = true;
+let launcherAccounts = [];
+let launcherVersions = [];
+const DEFAULT_STEVE_FACE = `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAACXBIWXMAAAsTAAALEwEAmpwYAAAHbklEQVR4nO2c+XMURRTH8ycoqCGwAUJIoiD3kaAiCggJMZs75FJgE/BCuc+gEG5CuELAEESuKin8RVBUIBBu8MADPKqACEQof7IstUrLzA95Vs/s7MzszGx3Z7pnd0m/qs+vU7Wf7+vX+0u/mBhRokSJEiVKlChRokSJEiVKlChRokLU1bXe1OMzR98/VNi//WB2CvDkgFcl2cB+RFYwSbAP8aKZvYjMvibeR0zSkyizB5Fh5D2V9D4B9nmT24/OSPvt8vKsdNfkHyoa0M5NbJZZ6n4bqbRi91CIRexWmagnARpVJmjsy0ppP1/tTeUeAOp8vNhk52Izk6ylchGbYCsWsUumN+x6wUiDyniFIxWp97gH8EFBv3ac2NBjwEbsJBuxGXZi+3AR22AhtmF8L3hXzziNnQF6wu70xHbuATgTm4gXm04mttFG7C6mYnsqjNXYoed5RLxMvR/uAbASSzNfG6nE9mImtj6Y5xS2B/AojFGoG+PhHwDLi6uRZL46ELuDoVgDz/aQ2RbM6B78A2B9cTUEi7WZr87FehyJRWyV6a7xTHfYEgT3AFhfXDvHhhIbz13sVkKxMk/HwWYrnoqDTTLd+AfgWKzFxVWvk2onts5G7DbHYuOIxBoY1Q1qTcRCbVos/wA6KpZ4vo4Jn9haG7Eb00JTk6ryGP8AOn5xeejm62h6sZs4irVjw0gj3ANgcXHZid3sglhNaiyxVDOPwvoR1nAPgOYfAdnFFUcgNjbsYvWsGx7MIwG4B0Dzj4Do4hoVHWJV1g4LDfcASMXymK8bwigWsWZoVyzcA8CJlS4tA+lSFWeWcmSJxkUzq4d01dHFwKrBXfgHgOvYaJQqUYAkW7FyEOJh/gHgxkA0SpVMLLYFSdZTPdAI9wBw8zVypS4JKZYURfRDMisGmOEeAO7iikapki2LTFhJdzUA3D+CaJQq4bigEfYAkGTjPwHjP4KokXrRKNaehQbCHoDdvwCVaJQqURD2ACJX6iJHYvEsICIMATz4UiUKXAig80mVAswH6Xxo+AfQCaVKFLgQQOeTKpmYZ0uYA+ApdUHYpNLgQgDR1K3zODLXkggJ4MGSKtlxzgz/ACiF4ap8+s9QVvkTlFX+KFNa8QOUVlyHUt91KPFdcywV931cWUk2MsdABAWgCMBVie8alEz7HoplvoPiqd/CZJlvoGjKVcedivs+PoA5VLgQAF0H4qpoylUomvI1FL6M+AoKX/oSCmS+gILyK1TH3wrc99kEMDtA1AWQX34F8ssvQ37ZZcgruwR5pYiLkFt6AXJLLlAdfytw38cHMJsKlwIgHwG4yi05DzmI4nOQXXwWsicjzoB3cjN4i5qpR0AwuO8zC+AsYpYbAZAffwSuvEWnIQtReAqyCpvgRUTBScgsOAGZ+Seojr8VuO9jAzg7iwr+AVAcfwSuMvOPy0zK+1wmI+8zyMj9VCY95xj1CAgG9/0oDIBuBOAqPecYpOd8AhOzP/ZzFCZ4jwSgOf5W4L5PFsBbxIQhAGcdKmGk3q9P09ieqlE3UubeNsQIha2I4QpbEMNCdCu51AgLwLlUGu75RSJ+3YwYqrAJMUShFjEYWjeqDILWGgW2gt/E4n4AHZBKQ6tfZGvNQGjdoDIA7q5XeRLurvOztn+AO2v6ybCQKp0hh38ATMSSd90dv0iZ1U9orHo8wO2VKRrVyQorEEnMxGrMDEmYA2A/U2/7RSJ+WY7oq/AOIlHhbUQfmZZliASFqgQmUmlwIQB3Z2pLlSKypao3tCxV6QW3lqj0hFuLVeLh1iIVD9xc6GEqV+MNWyIgAIKZSnH8by70aCzooTG/e4Ab8+I05nYzwEosKS4E4O5MvREklBYWUg0063ndBP8AGM/Ug5i1Nk471WqljX7VAolUGlwIgO08PRByCVOS407F7atwKlxqfs1AhAWAF7XXYuGSqUMJj78V+jUKgYUfulf+JFJpcCEAtjN1j02H7mbUoVav+vWv+Z3INvKqTOQEQNipjSEWfKDdE7QjIBjT6/2gdQgkUm05bYZ/AAwuKssOHWe9dsZpZ9quP/C/dSaRSs4rbgTA5rLSd2h9UIfq1x/QHH8rcI/GSaTS4HIAzmdnnd1yDrsOpexU88v7oGe1lIIjIADnF5V1h8aF2BMR6mF4xx6Dq688yeXOICIMAdBfVHpqGQuleUkvv+okFIvllIILATi9qIxztYZqRQHNSgKyVQQkUjWmY+EfAKPLSmU9Y6G4nQ7BjwtJpNLgQgCsLiyly1jKDN7bgFsrgOiY6EpbwhwA/excw1gobpVA8Et3Eqk0uBCA84tKzyrGQmnpuOwKS9wPwEIqzXGuZijTeQDWUqUmcvgHwPjSkhgef5pOpRVrj89ABAXw4EiVKHAhgM4nVYruAKJfqhRJAbQ1Vf7d2aRKhLQ1TfuTewDSyYqPOpNUiY7D3AP477Qvpa3J90cE/FiIJNpO+n7/50ylJ8aN+vf41HipadqHbU2+v8L9w6Vwi1ccHHZNvihRokSJEiVKlChRokSJEiVKlKiYaK3/Aa+vZ4Ppmm36AAAAAElFTkSuQmCC`;
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function accountName(account) {
+    return account?.login || account?.[1] || "";
+}
+
+function accountType(account) {
+    return account?.account_type || account?.[3] || "offline";
+}
+
+function accountSkinUrl(account) {
+    const name = accountName(account);
+    const storedUrl = account?.skin_url || account?.[7] || "";
+    if (storedUrl) {
+        return storedUrl.replace(
+            "https://skinsystem.ely.by",
+            "http://skinsystem.ely.by",
+        );
+    }
+    return accountType(account) === "ely"
+        ? `http://skinsystem.ely.by/skins/${encodeURIComponent(name)}.png`
+        : "";
+}
+
+function makeAvatar(account, className = "") {
+    const avatar = document.createElement("span");
+    const type = accountType(account);
+    avatar.className = `${className} ${type === "ely" ? "ely" : "offline"}`.trim();
+
+    const img = document.createElement("img");
+    img.alt = accountName(account) || "Steve";
+    img.src = type === "ely" ? accountSkinUrl(account) : DEFAULT_STEVE_FACE;
+    img.onerror = () => {
+        avatar.classList.remove("ely");
+        avatar.classList.add("offline");
+        img.onerror = null;
+        img.src = DEFAULT_STEVE_FACE;
+    };
+    avatar.appendChild(img);
+    return avatar;
+}
+
+function closeLauncherCombos(except = null) {
+    document.querySelectorAll(".launcher-combo.open").forEach((combo) => {
+        if (combo !== except) combo.classList.remove("open");
+    });
+}
+
+function updateComboToggle(kind, label, account = null) {
+    const combo = document.querySelector(`.${kind}-combo`);
+    if (!combo) return;
+    const title = combo.querySelector(".combo-title");
+    if (title) title.textContent = label;
+    if (kind === "account") {
+        const avatar = combo.querySelector(".combo-account-avatar");
+        if (avatar) {
+            avatar.replaceWith(
+                makeAvatar(
+                    account || { login: "", account_type: "offline" },
+                    "combo-avatar combo-account-avatar",
+                ),
+            );
+        }
+    }
+}
+
+function setupLauncherCombos() {
+    document.querySelectorAll(".launcher-combo-toggle").forEach((button) => {
+        button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const combo = button.closest(".launcher-combo");
+            const willOpen = !combo.classList.contains("open");
+            closeLauncherCombos(combo);
+            combo.classList.toggle("open", willOpen);
+        });
+    });
+    document.addEventListener("click", () => closeLauncherCombos());
+    document.querySelectorAll(".combo-add-account").forEach((button) => {
+        button.addEventListener("click", () => {
+            closeLauncherCombos();
+            const menuItem = document.querySelector('.menu-item[data-section="accounts"]');
+            if (menuItem) menuItem.click();
+        });
+    });
+}
+
+function renderAccountCombo() {
+    const box = document.querySelector(".account-combo-options");
+    if (!box) return;
+    box.innerHTML = "";
+    const selected = accountSelect?.value || "";
+    const selectedAccount = launcherAccounts.find(
+        (account) => accountName(account) === selected,
+    );
+    updateComboToggle("account", selected || "Выберите аккаунт", selectedAccount);
+
+    if (launcherAccounts.length === 0) {
+        box.innerHTML = '<div class="empty-state"><i class="fas fa-user-slash"></i><div>Аккаунтов нет</div></div>';
+        return;
+    }
+
+    launcherAccounts.forEach((account) => {
+        const name = accountName(account);
+        const type = accountType(account);
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = `combo-option ${name === selected ? "selected" : ""}`;
+        option.appendChild(makeAvatar(account, "combo-avatar"));
+        const main = document.createElement("span");
+        main.className = "combo-option-main";
+        main.innerHTML = `<span class="combo-option-name">${escapeHtml(name)}</span><span class="combo-option-subtitle">${type === "ely" ? "Ely.by skin account" : "Offline"}</span>`;
+        const more = document.createElement("span");
+        more.className = "combo-option-more";
+        more.innerHTML = '<i class="fas fa-ellipsis"></i>';
+        option.appendChild(main);
+        option.appendChild(more);
+        option.addEventListener("click", () => {
+            accountSelect.value = name;
+            accountSelect.dispatchEvent(new Event("change"));
+            closeLauncherCombos();
+            renderAccountCombo();
+        });
+        box.appendChild(option);
+    });
+}
+
+function renderVersionCombo() {
+    const box = document.querySelector(".version-combo-options");
+    if (!box) return;
+    box.innerHTML = "";
+    const selected = versionSelect?.value || "";
+    updateComboToggle("version", selected ? `Версия ${selected}` : "Выберите версию");
+
+    if (launcherVersions.length === 0) {
+        box.innerHTML = '<div class="empty-state"><i class="fas fa-cubes"></i><div>Версий нет</div></div>';
+        return;
+    }
+
+    launcherVersions.forEach((version) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = `combo-option ${version === selected ? "selected" : ""}`;
+        const icon = document.createElement("span");
+        icon.className = "combo-version-icon";
+        icon.innerHTML = '<i class="fas fa-cubes"></i>';
+        const main = document.createElement("span");
+        main.className = "combo-option-main";
+        main.innerHTML = `<span class="combo-option-name">Версия ${escapeHtml(version)}</span><span class="combo-option-subtitle">Установлена в лаунчере</span>`;
+        option.appendChild(icon);
+        option.appendChild(main);
+        option.addEventListener("click", () => {
+            versionSelect.value = version;
+            versionSelect.dispatchEvent(new Event("change"));
+            if (typeof toggleServerSelect === "function") toggleServerSelect();
+            closeLauncherCombos();
+            renderVersionCombo();
+        });
+        box.appendChild(option);
+    });
+}
+
+document.addEventListener("DOMContentLoaded", setupLauncherCombos);
 
 function showRuntimeLogsModal() {
     const modal = document.getElementById("runtimeLogModal");
@@ -859,6 +1033,7 @@ async function updateVersionSelect() {
     const uniqueVersions = Array.from(
         new Set((versionsFromDb || []).map((version) => version[1])),
     );
+    launcherVersions = uniqueVersions;
     uniqueVersions.forEach((versionValue) => {
         const option = new Option(`${versionValue}`, versionValue);
         versionSelect.add(option);
@@ -874,11 +1049,17 @@ async function updateVersionSelect() {
     });
 
     playBtn.disabled = !versionSelect.value || isDownloading;
+    renderVersionCombo();
     updateStats();
 }
 
 versionSelect.addEventListener("change", () => {
     playBtn.disabled = !versionSelect.value || isDownloading;
+    renderVersionCombo();
+});
+
+accountSelect.addEventListener("change", () => {
+    renderAccountCombo();
 });
 
 // ---------- Circular progress ----------
@@ -901,7 +1082,6 @@ try {
 // ---------- Play button ----------
 playBtn.addEventListener("click", async () => {
     const selectedVersion = versionSelect.value;
-    const accountSelect = document.querySelector(".account-select");
     const selectedLogin = accountSelect.value;
     const selectedServer = serverSelect.value;
     let launcherCheckClose = true;
@@ -943,6 +1123,8 @@ playBtn.addEventListener("click", async () => {
         playBtn.disabled = false;
 
         if (launcherCheckClose) {
+            renderAccountCombo();
+            renderVersionCombo();
             try {
                 const canClose = await eel.check_close()();
                 if (canClose) window.close();
@@ -1110,10 +1292,12 @@ async function updateServerSelect() {
 document.addEventListener("DOMContentLoaded", () => {
     const accountInput = document.getElementById("login");
     const addAccountBtn = document.querySelector(".add-account-btn");
+    const addElyAccountBtn = document.querySelector(".add-ely-account-btn");
+    const elyLoginInput = document.getElementById("ely-login");
+    const elyPasswordInput = document.getElementById("ely-password");
     const accountItems = document.querySelector(".account-items");
 
     async function updateAccountSelect() {
-        const accountSelect = document.querySelector(".account-select");
         accountSelect.innerHTML = '<option value="">Выберите аккаунт</option>';
         accountItems.innerHTML = "";
 
@@ -1124,46 +1308,70 @@ document.addEventListener("DOMContentLoaded", () => {
             accountVersionData = await eel.get_account_version()();
         } catch (e) {}
 
+        launcherAccounts = accounts || [];
         let logindata1 = "";
         if (accountVersionData.length > 0) {
             [logindata1] = accountVersionData;
         }
 
         const countEl = document.getElementById("accounts-count");
-        if (countEl) countEl.textContent = accounts.length;
+        if (countEl) countEl.textContent = launcherAccounts.length;
 
-        if (accounts.length === 0) {
+        if (launcherAccounts.length === 0) {
             accountItems.innerHTML = `
                 <div class="empty-state">
                     <i class="fas fa-user-slash"></i>
                     <div>Аккаунтов нет</div>
+                    <div style="font-size:11px;color:var(--text-dim)">Добавьте offline или Ely.by аккаунт</div>
                 </div>
             `;
+            renderAccountCombo();
             updateStats();
             return;
         }
 
-        accounts.forEach((account) => {
-            const name = account[1];
+        launcherAccounts.forEach((account) => {
+            const name = accountName(account);
+            const type = accountType(account);
             const option = new Option(name, name);
             accountSelect.add(option);
             if (name == logindata1) accountSelect.value = logindata1;
 
             const accountItem = document.createElement("div");
-            accountItem.className = "account-item";
+            accountItem.className = `account-item ${name === logindata1 ? "selected" : ""}`;
 
-            const avatar = document.createElement("div");
-            avatar.className = "account-avatar";
-            avatar.textContent = name.charAt(0).toUpperCase();
+            const avatar = makeAvatar(account, "account-avatar");
+            const meta = document.createElement("div");
+            meta.className = "account-meta";
+            const nameRow = document.createElement("div");
+            nameRow.className = "account-name-row";
 
             const nameNode = document.createElement("span");
             nameNode.className = "account-name";
             nameNode.textContent = name;
+            const badge = document.createElement("span");
+            badge.className = `account-badge ${type === "ely" ? "ely" : "offline"}`;
+            badge.innerHTML = type === "ely" ? '<i class="fas fa-shield-halved"></i> Ely.by' : '<i class="fas fa-user"></i> Offline';
+            nameRow.appendChild(nameNode);
+            nameRow.appendChild(badge);
+            const subtitle = document.createElement("div");
+            subtitle.className = "account-subtitle";
+            subtitle.textContent = type === "ely" ? "Скин загружается из Ely.by" : "Обычный аккаунт со Steve-иконкой";
+            meta.appendChild(nameRow);
+            meta.appendChild(subtitle);
+
+            accountItem.addEventListener("click", () => {
+                accountSelect.value = name;
+                accountSelect.dispatchEvent(new Event("change"));
+                document.querySelectorAll(".account-item.selected").forEach((item) => item.classList.remove("selected"));
+                accountItem.classList.add("selected");
+            });
 
             const deleteBtn = document.createElement("button");
             deleteBtn.className = "delete-account-btn";
             deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
-            deleteBtn.addEventListener("click", async () => {
+            deleteBtn.addEventListener("click", async (event) => {
+                event.stopPropagation();
                 try {
                     await eel.delete_account(name)();
                     accountItem.remove();
@@ -1177,10 +1385,11 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             accountItem.appendChild(avatar);
-            accountItem.appendChild(nameNode);
+            accountItem.appendChild(meta);
             accountItem.appendChild(deleteBtn);
             accountItems.appendChild(accountItem);
         });
+        renderAccountCombo();
         updateStats();
     }
 
@@ -1202,7 +1411,7 @@ document.addEventListener("DOMContentLoaded", () => {
             accountInput.value = "";
             updateAccountSelect();
             toast({
-                title: "Аккаунт добавлен",
+                title: "Offline аккаунт добавлен",
                 message: login,
                 type: "success",
             });
@@ -1215,8 +1424,48 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    addElyAccountBtn?.addEventListener("click", async () => {
+        const username = elyLoginInput.value.trim();
+        const password = elyPasswordInput.value;
+        if (!username || !password) {
+            toast({
+                title: "Введите данные Ely.by",
+                message: "Нужны логин/e-mail и пароль",
+                type: "error",
+            });
+            return;
+        }
+        addElyAccountBtn.disabled = true;
+        addElyAccountBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Авторизация...';
+        try {
+            const result = await eel.add_ely_account(username, password)();
+            if (!result?.ok) {
+                toast({
+                    title: "Ely.by не подключён",
+                    message: result?.error || "Проверьте данные аккаунта",
+                    type: "error",
+                });
+                return;
+            }
+            elyPasswordInput.value = "";
+            elyLoginInput.value = "";
+            await updateAccountSelect();
+            toast({
+                title: "Ely.by аккаунт добавлен",
+                message: result.account?.login || username,
+                type: "success",
+            });
+        } finally {
+            addElyAccountBtn.disabled = false;
+            addElyAccountBtn.innerHTML = '<i class="fas fa-right-to-bracket"></i> Войти через Ely.by';
+        }
+    });
+
     accountInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") addAccountBtn.click();
+    });
+    elyPasswordInput?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") addElyAccountBtn?.click();
     });
 
     updateAccountSelect();
@@ -1431,7 +1680,9 @@ async function updateVersionGrid() {
                                     '<i class="fas fa-check"></i> Установлено';
                                 cover.appendChild(b);
                             }
-                            const settingsBtn = btn.closest(".version-card")?.querySelector(".settings-modpack-btn");
+                            const settingsBtn = btn
+                                .closest(".version-card")
+                                ?.querySelector(".settings-modpack-btn");
                             if (settingsBtn) settingsBtn.style.display = "flex";
                             toast({
                                 title: "Загружено",
@@ -1492,7 +1743,9 @@ async function updateVersionGrid() {
                             '<i class="fas fa-check"></i> Установлено';
                         cover.appendChild(b);
                     }
-                    const settingsBtn = btn.closest(".version-card")?.querySelector(".settings-modpack-btn");
+                    const settingsBtn = btn
+                        .closest(".version-card")
+                        ?.querySelector(".settings-modpack-btn");
                     if (settingsBtn) settingsBtn.style.display = "flex";
                     toast({
                         title: "Загружено",
@@ -1581,7 +1834,9 @@ async function updateVersionGrid() {
                                     '<i class="fas fa-check"></i> Установлено';
                                 cover.appendChild(b);
                             }
-                            const settingsBtn = btn.closest(".version-card")?.querySelector(".settings-modpack-btn");
+                            const settingsBtn = btn
+                                .closest(".version-card")
+                                ?.querySelector(".settings-modpack-btn");
                             if (settingsBtn) settingsBtn.style.display = "flex";
                             toast({
                                 title: "Загружено",
@@ -1642,7 +1897,9 @@ async function updateVersionGrid() {
                             '<i class="fas fa-check"></i> Установлено';
                         cover.appendChild(b);
                     }
-                    const settingsBtn = btn.closest(".version-card")?.querySelector(".settings-modpack-btn");
+                    const settingsBtn = btn
+                        .closest(".version-card")
+                        ?.querySelector(".settings-modpack-btn");
                     if (settingsBtn) settingsBtn.style.display = "flex";
                     toast({
                         title: "Загружено",
@@ -2654,7 +2911,10 @@ async function openModpackManageModal(buildId) {
 }
 
 function getModrinthUrl(mod) {
-    return mod?.url || `https://modrinth.com/mod/${mod?.slug || mod?.project_id || ""}`;
+    return (
+        mod?.url ||
+        `https://modrinth.com/mod/${mod?.slug || mod?.project_id || ""}`
+    );
 }
 
 function openExternalUrl(url) {
@@ -2701,7 +2961,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.target === modal) closeModpackModal();
     });
 
-    
     versionSelect?.addEventListener("change", onVersionChange);
     saveBtn?.addEventListener("click", saveCustomModpack);
     searchInput?.addEventListener("input", debounce(loadAvailableMods, 350));
@@ -2726,7 +2985,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (mode === "create") {
             modalTitle.textContent = "Создать сборку";
-            modalSubtitle.textContent = "Название → описание → версия → Forge/Fabric → Создать";
+            modalSubtitle.textContent =
+                "Название → описание → версия → Forge/Fabric → Создать";
             saveBtn.innerHTML = '<i class="fas fa-plus"></i> Создать';
             manageTools.style.display = "none";
             saveRow.style.display = "flex";
@@ -2737,8 +2997,10 @@ document.addEventListener("DOMContentLoaded", () => {
             loadVersionsIfNeeded();
         } else if (mode === "manage" && modpackData) {
             modalTitle.textContent = "Управление сборкой";
-            modalSubtitle.textContent = modpackData.name || modpackData.id || "Сборка";
-            saveBtn.innerHTML = '<i class="fas fa-save"></i> Сохранить описание';
+            modalSubtitle.textContent =
+                modpackData.name || modpackData.id || "Сборка";
+            saveBtn.innerHTML =
+                '<i class="fas fa-save"></i> Сохранить описание';
             manageTools.style.display = "block";
             saveRow.style.display = "flex";
             nameInput.value = modpackData.name || "";
@@ -2751,11 +3013,15 @@ document.addEventListener("DOMContentLoaded", () => {
             versionSelect.disabled = true;
             loaderSelect.disabled = true;
             descInput.disabled = false;
-            providerTabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.provider === provider));
+            providerTabs.forEach((tab) =>
+                tab.classList.toggle(
+                    "active",
+                    tab.dataset.provider === provider,
+                ),
+            );
             loadAvailableMods();
             loadInstalledMods();
         }
-
     };
 
     function closeModpackModal() {
@@ -2770,15 +3036,18 @@ document.addEventListener("DOMContentLoaded", () => {
         installedList.innerHTML = "";
         document.getElementById("mods-count-badge").textContent = "0";
         document.getElementById("installed-mods-count").textContent = "0";
-        if (createNote) createNote.textContent = "Ядро появится после выбора версии";
+        if (createNote)
+            createNote.textContent = "Ядро появится после выбора версии";
     }
 
     async function loadVersionsIfNeeded() {
         if (versionSelect.options.length > 1) return;
-        versionSelect.innerHTML = '<option value="">Загрузка версий...</option>';
+        versionSelect.innerHTML =
+            '<option value="">Загрузка версий...</option>';
         try {
             const online = await eel.get_online_minecraft_versions(120)();
-            versionSelect.innerHTML = '<option value="">Выберите версию</option>';
+            versionSelect.innerHTML =
+                '<option value="">Выберите версию</option>';
             (online.releases || []).forEach((v) => {
                 const opt = document.createElement("option");
                 opt.value = v;
@@ -2786,9 +3055,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 versionSelect.appendChild(opt);
             });
         } catch (e) {
-            versionSelect.innerHTML = '<option value="">Ошибка загрузки</option>';
+            versionSelect.innerHTML =
+                '<option value="">Ошибка загрузки</option>';
         }
-        loaderSelect.innerHTML = '<option value="">Сначала выберите версию</option>';
+        loaderSelect.innerHTML =
+            '<option value="">Сначала выберите версию</option>';
     }
 
     async function onVersionChange() {
@@ -2796,17 +3067,22 @@ document.addEventListener("DOMContentLoaded", () => {
         loaderSelect.innerHTML = '<option value="">Проверяем ядра...</option>';
         loaderSelect.disabled = true;
         if (!version) {
-            loaderSelect.innerHTML = '<option value="">Сначала выберите версию</option>';
-            if (createNote) createNote.textContent = "Ядро появится после выбора версии";
+            loaderSelect.innerHTML =
+                '<option value="">Сначала выберите версию</option>';
+            if (createNote)
+                createNote.textContent = "Ядро появится после выбора версии";
             return;
         }
-        
+
         try {
             const loaders = await eel.get_available_loaders(version)();
             loaderSelect.innerHTML = "";
             if (!loaders.length) {
-                loaderSelect.innerHTML = '<option value="">Нет доступных ядер</option>';
-                if (createNote) createNote.textContent = "Для этой версии Forge/Fabric не найдены";
+                loaderSelect.innerHTML =
+                    '<option value="">Нет доступных ядер</option>';
+                if (createNote)
+                    createNote.textContent =
+                        "Для этой версии Forge/Fabric не найдены";
                 return;
             }
             loaders.forEach((loader) => {
@@ -2815,9 +3091,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 opt.textContent = loader === "fabric" ? "Fabric" : "Forge";
                 loaderSelect.appendChild(opt);
             });
-            if (createNote) createNote.textContent = `Доступно: ${loaders.map((l) => (l === "fabric" ? "Fabric" : "Forge")).join(", ")}`;
+            if (createNote)
+                createNote.textContent = `Доступно: ${loaders.map((l) => (l === "fabric" ? "Fabric" : "Forge")).join(", ")}`;
         } catch (e) {
-            loaderSelect.innerHTML = '<option value="">Ошибка проверки</option>';
+            loaderSelect.innerHTML =
+                '<option value="">Ошибка проверки</option>';
         } finally {
             loaderSelect.disabled = false;
         }
@@ -2845,7 +3123,11 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const result = await eel.save_custom_modpack(payload)();
             if (!result?.ok) {
-                toast({ title: "Ошибка сохранения", message: result?.error || "Неизвестная ошибка", type: "error" });
+                toast({
+                    title: "Ошибка сохранения",
+                    message: result?.error || "Неизвестная ошибка",
+                    type: "error",
+                });
                 return;
             }
             toast({
@@ -2866,12 +3148,23 @@ document.addEventListener("DOMContentLoaded", () => {
         const version = versionSelect.value;
         const loader = loaderSelect.value;
         if (!version || !loader || modeInput.value !== "manage") return;
-        resultsEl.innerHTML = '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
+        resultsEl.innerHTML =
+            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
         try {
-            const mods = await eel.search_mods(provider, searchInput.value, version, loader, 20, "downloads")();
-            document.getElementById("mods-count-badge").textContent = mods.length;
+            const mods = await eel.search_mods(
+                provider,
+                searchInput.value,
+                version,
+                loader,
+                20,
+                "downloads",
+            )();
+            document.getElementById("mods-count-badge").textContent =
+                mods.length;
             resultsEl.innerHTML =
-                mods.map((m) => `
+                mods
+                    .map(
+                        (m) => `
                 <div class="mod-result-card" data-url="${escapeHtml(getModrinthUrl(m))}">
                     <div class="mod-result-icon">${m.icon ? `<img src="${escapeHtml(m.icon)}" alt="">` : '<i class="fas fa-cube"></i>'}</div>
                     <div class="mod-result-info">
@@ -2886,11 +3179,15 @@ document.addEventListener("DOMContentLoaded", () => {
                         <button class="mod-link-btn" data-url="${escapeHtml(getModrinthUrl(m))}"><i class="fas fa-arrow-up-right-from-square"></i></button>
                         <button class="mod-install-btn" data-id="${escapeHtml(m.project_id)}">Установить</button>
                     </div>
-                </div>`).join("") ||
+                </div>`,
+                    )
+                    .join("") ||
                 '<div class="mod-empty"><i class="fas fa-search"></i><p>Ничего не найдено</p></div>';
-            
+
             resultsEl.querySelectorAll(".mod-result-card").forEach((card) => {
-                card.addEventListener("click", () => openExternalUrl(card.dataset.url));
+                card.addEventListener("click", () =>
+                    openExternalUrl(card.dataset.url),
+                );
             });
             resultsEl.querySelectorAll(".mod-link-btn").forEach((btn) => {
                 btn.addEventListener("click", (e) => {
@@ -2905,7 +3202,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     this.textContent = "Установка...";
                     this.disabled = true;
                     try {
-                        const res = await eel.install_mod(provider, modId, currentManagedBuildId, version, loader)();
+                        const res = await eel.install_mod(
+                            provider,
+                            modId,
+                            currentManagedBuildId,
+                            version,
+                            loader,
+                        )();
                         if (res.ok) {
                             this.textContent = "Установлено";
                             this.classList.add("installed");
@@ -2921,7 +3224,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 }),
             );
         } catch (e) {
-            resultsEl.innerHTML = '<div class="mod-empty"><i class="fas fa-exclamation-triangle"></i><p>Ошибка загрузки каталога</p></div>';
+            resultsEl.innerHTML =
+                '<div class="mod-empty"><i class="fas fa-exclamation-triangle"></i><p>Ошибка загрузки каталога</p></div>';
         }
     }
 
@@ -2930,22 +3234,33 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!buildId) return;
         try {
             const list = await eel.list_installed_mods(buildId)();
-            document.getElementById("installed-mods-count").textContent = list.length;
+            document.getElementById("installed-mods-count").textContent =
+                list.length;
             installedList.innerHTML =
-                list.map((m) => {
-                    const cleanName = String(m.name || "").replace(/\.jar$/i, "");
-                    const url = `https://modrinth.com/mods?q=${encodeURIComponent(cleanName)}`;
-                    return `
+                list
+                    .map((m) => {
+                        const cleanName = String(m.name || "").replace(
+                            /\.jar$/i,
+                            "",
+                        );
+                        const url = `https://modrinth.com/mods?q=${encodeURIComponent(cleanName)}`;
+                        return `
                 <div class="installed-mod-chip" data-url="${escapeHtml(url)}" title="Открыть поиск Modrinth">
                     <span class="chip-icon">${m.icon ? `<img src="${escapeHtml(m.icon)}">` : '<i class="fas fa-cube"></i>'}</span>
                     <span class="chip-name">${escapeHtml(m.name)}</span>
                     <span class="chip-remove" data-mod="${escapeHtml(m.name)}" title="Удалить"><i class="fas fa-times"></i></span>
                 </div>`;
-                }).join("") || '<div class="mod-empty"><p>Пока нет установленных модов</p></div>';
+                    })
+                    .join("") ||
+                '<div class="mod-empty"><p>Пока нет установленных модов</p></div>';
 
-            installedList.querySelectorAll(".installed-mod-chip").forEach((chip) =>
-                chip.addEventListener("click", () => openExternalUrl(chip.dataset.url)),
-            );
+            installedList
+                .querySelectorAll(".installed-mod-chip")
+                .forEach((chip) =>
+                    chip.addEventListener("click", () =>
+                        openExternalUrl(chip.dataset.url),
+                    ),
+                );
             installedList.querySelectorAll(".chip-remove").forEach((el) =>
                 el.addEventListener("click", async (e) => {
                     e.stopPropagation();
@@ -2953,14 +3268,19 @@ document.addEventListener("DOMContentLoaded", () => {
                     try {
                         await eel.delete_installed_mod(buildId, modName)();
                         await loadInstalledMods();
-                        toast({ title: "Мод удалён", message: modName, type: "info" });
+                        toast({
+                            title: "Мод удалён",
+                            message: modName,
+                            type: "info",
+                        });
                     } catch (err) {
                         toast({ title: "Ошибка удаления", type: "error" });
                     }
                 }),
             );
         } catch (e) {
-            installedList.innerHTML = '<div class="mod-empty"><p>Ошибка загрузки списка</p></div>';
+            installedList.innerHTML =
+                '<div class="mod-empty"><p>Ошибка загрузки списка</p></div>';
         }
     }
 
