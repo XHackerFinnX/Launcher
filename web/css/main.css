@@ -3012,8 +3012,47 @@ html {
     padding-right: 4px;
 }
 
-.mods-sentinel {
-    height: 1px;
+.mods-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+.mods-pagination.hidden {
+    display: none;
+}
+.mods-page-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+.mods-page-btn:hover:not(:disabled) {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent-border);
+}
+.mods-page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.mods-page-indicator {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    min-width: 90px;
+    text-align: center;
 }
 
 .mods-loading-row {

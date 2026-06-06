@@ -363,6 +363,17 @@
                                 </div>
                             </button>
                         </div>
+                        <div>
+                            <button
+                                class="btn-secondary"
+                                id="open-modpack-importer"
+                            >
+                                <div>
+                                    <i class="fas fa-file-import"></i> Загрузить
+                                    сборку
+                                </div>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="versions-grid"></div>
@@ -1065,7 +1076,7 @@
                             </h3>
                             <h4 class="settings-subheader-h4">
                                 После удаления версии рекомендуем перезапустить
-                                лаунчер.
+                                ла��нчер.
                             </h4>
                             <div class="version-deletion">
                                 <select
@@ -1730,11 +1741,41 @@
                                 id="modpack-loader-pill"
                             ></span>
                             <button
+                                id="modpack-share-btn"
+                                class="modpack-share-action"
+                                title="Поделиться сборкой"
+                            >
+                                <i class="fas fa-share-nodes"></i> Поделиться
+                            </button>
+                            <button
                                 id="modpack-delete-btn"
                                 class="modpack-delete-action"
                                 title="Удалить сборку"
                             >
                                 <i class="fas fa-trash"></i> Удалить
+                            </button>
+                        </div>
+
+                        <!-- Описание сборки с мини-кнопкой сохранения -->
+                        <div class="modpack-desc-row">
+                            <div class="modpack-desc-field">
+                                <label for="modpack-manage-description"
+                                    >Описание сборки</label
+                                >
+                                <textarea
+                                    id="modpack-manage-description"
+                                    class="search-input modpack-textarea"
+                                    placeholder="Расскажите, что входит в сборку…"
+                                    maxlength="500"
+                                ></textarea>
+                            </div>
+                            <button
+                                id="modpack-desc-save"
+                                class="modpack-desc-save-btn"
+                                title="Сохранить описание"
+                            >
+                                <i class="fas fa-floppy-disk"></i>
+                                <span>Сохранить</span>
                             </button>
                         </div>
                     </div>
@@ -1755,6 +1796,9 @@
                         </button>
                         <button class="content-type-tab" data-content="shader">
                             <i class="fas fa-wand-magic-sparkles"></i> Шейдеры
+                        </button>
+                        <button class="content-type-tab" data-content="world">
+                            <i class="fas fa-earth-americas"></i> Миры
                         </button>
                     </div>
 
@@ -1821,10 +1865,51 @@
                             ></div>
 
                             <div
+                                id="content-install-bar"
+                                class="content-install-bar hidden"
+                            >
+                                <div class="content-install-head">
+                                    <span id="content-install-name"
+                                        >Установка…</span
+                                    >
+                                    <span id="content-install-percent">0%</span>
+                                </div>
+                                <div class="task-progress-track">
+                                    <div
+                                        class="task-progress-fill"
+                                        id="content-install-fill"
+                                    ></div>
+                                </div>
+                            </div>
+
+                            <div
                                 id="mods-results"
                                 class="mods-results-list"
                             ></div>
-                            <div id="mods-sentinel" class="mods-sentinel"></div>
+                            <div
+                                id="mods-pagination"
+                                class="mods-pagination hidden"
+                            >
+                                <button
+                                    id="mods-prev"
+                                    class="mods-page-btn"
+                                    title="Предыдущая страница"
+                                >
+                                    <i class="fas fa-chevron-left"></i> Назад
+                                </button>
+                                <span
+                                    id="mods-page-indicator"
+                                    class="mods-page-indicator"
+                                    >Стр. 1</span
+                                >
+                                <button
+                                    id="mods-next"
+                                    class="mods-page-btn"
+                                    title="Следующая страница"
+                                >
+                                    Вперёд <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Установленный контент -->
@@ -1849,10 +1934,174 @@
                         </div>
                     </div>
 
-                    <!-- Кнопка сохранения (видна только в режиме создания/управления) -->
+                    <!-- Панель миров (вкладка «Миры») -->
+                    <div class="modpack-worlds-panel" id="modpack-worlds-panel">
+                        <div class="mod-section">
+                            <div class="mod-section-header">
+                                <h4>
+                                    <i class="fas fa-earth-americas"></i>
+                                    <span>Миры в этой сборке</span>
+                                </h4>
+                                <div class="worlds-header-actions">
+                                    <span
+                                        class="mod-section-badge"
+                                        id="worlds-count"
+                                        >0</span
+                                    >
+                                    <button
+                                        id="worlds-open-folder"
+                                        class="worlds-folder-btn"
+                                        title="Открыть папку saves"
+                                    >
+                                        <i class="fas fa-folder-open"></i>
+                                        Открыть папку
+                                    </button>
+                                    <button
+                                        id="worlds-refresh"
+                                        class="worlds-folder-btn"
+                                        title="Обновить список"
+                                    >
+                                        <i class="fas fa-rotate"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="worlds-hint">
+                                Здесь показаны миры из папки
+                                <code>saves</code> выбранной сборки. Чтобы
+                                добавить мир, распакуйте его в папку saves через
+                                кнопку «Открыть папку».
+                            </p>
+                            <div id="worlds-grid" class="worlds-grid"></div>
+                        </div>
+                    </div>
+
+                    <!-- Кнопка сохранения (видна только в режиме создания) -->
                     <div id="modpack-save-row" class="modpack-footer">
                         <button id="modpack-save-btn" class="btn-primary">
                             <i class="fas fa-plus"></i> Создать
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Поделиться сборкой (экспорт) ===== -->
+        <div class="modpack-modal hidden" id="share-modal">
+            <div class="modpack-card share-card">
+                <div class="modal-header">
+                    <div class="modal-header-left">
+                        <div class="modal-icon">
+                            <i class="fas fa-share-nodes"></i>
+                        </div>
+                        <div class="modal-header-text">
+                            <h3>Поделиться сборкой</h3>
+                            <p id="share-modal-subtitle">
+                                Упаковка сборки в архив
+                            </p>
+                        </div>
+                    </div>
+                    <button id="close-share-modal" class="modal-close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="share-progress-block" id="share-progress-block">
+                        <div class="share-progress-head">
+                            <span id="share-progress-stage"
+                                >Подготовка…</span
+                            >
+                            <span id="share-progress-percent">0%</span>
+                        </div>
+                        <div class="task-progress-track">
+                            <div
+                                class="task-progress-fill"
+                                id="share-progress-fill"
+                            ></div>
+                        </div>
+                        <ul class="share-log" id="share-log"></ul>
+                    </div>
+                    <div class="share-result hidden" id="share-result">
+                        <div class="share-result-icon">
+                            <i class="fas fa-circle-check"></i>
+                        </div>
+                        <p class="share-result-title">Сборка готова!</p>
+                        <p class="share-result-path" id="share-result-path"></p>
+                        <button class="btn-primary" id="share-open-folder">
+                            <i class="fas fa-folder-open"></i> Открыть папку с
+                            архивом
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Загрузить сборку (импорт) ===== -->
+        <div class="modpack-modal hidden" id="import-modal">
+            <div class="modpack-card share-card">
+                <div class="modal-header">
+                    <div class="modal-header-left">
+                        <div class="modal-icon">
+                            <i class="fas fa-file-import"></i>
+                        </div>
+                        <div class="modal-header-text">
+                            <h3>Загрузить сборку</h3>
+                            <p>Перенесите архив сборки (.zip / .slpack)</p>
+                        </div>
+                    </div>
+                    <button id="close-import-modal" class="modal-close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div
+                        class="import-dropzone"
+                        id="import-dropzone"
+                        tabindex="0"
+                    >
+                        <i class="fas fa-cloud-arrow-up"></i>
+                        <p class="import-dropzone-title">
+                            Перетащите архив сборки сюда
+                        </p>
+                        <p class="import-dropzone-sub">
+                            или нажмите, чтобы выбрать файл
+                        </p>
+                        <div
+                            class="import-selected hidden"
+                            id="import-selected"
+                        >
+                            <i class="fas fa-box-archive"></i>
+                            <span id="import-selected-name"></span>
+                        </div>
+                    </div>
+
+                    <div class="import-summary hidden" id="import-summary"></div>
+
+                    <div
+                        class="share-progress-block hidden"
+                        id="import-progress-block"
+                    >
+                        <div class="share-progress-head">
+                            <span id="import-progress-stage"
+                                >Установка…</span
+                            >
+                            <span id="import-progress-percent">0%</span>
+                        </div>
+                        <div class="task-progress-track">
+                            <div
+                                class="task-progress-fill"
+                                id="import-progress-fill"
+                            ></div>
+                        </div>
+                        <ul class="share-log" id="import-log"></ul>
+                    </div>
+
+                    <div class="modpack-footer">
+                        <button
+                            class="btn-primary"
+                            id="import-install-btn"
+                            disabled
+                        >
+                            <i class="fas fa-download"></i> Установить сборку
                         </button>
                     </div>
                 </div>
