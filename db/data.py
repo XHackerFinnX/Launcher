@@ -11,6 +11,7 @@ import minecraft_launcher_lib
 import json
 import time
 import uuid
+import ipaddress
 from datetime import datetime
 from urllib.parse import urljoin
 import urllib.error
@@ -27,6 +28,8 @@ from utils import ely
 db_path = r"C:\.stoneworld\db\launcher.db"
 log_path = r"C:\.stoneworld\logs\launcher.log"
 REQUEST_TIMEOUT = (5, 20)
+LAUNCHER_VERSION_URL = "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/launcher.json"
+UPDATE_CHECK_TIMEOUT = (3, 5)
 FILE_INTEGRITY_MANIFEST_URL = "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/launcher-file.json"
 logger = logging.getLogger(__name__)
 _log_viewer_process = None
@@ -34,6 +37,42 @@ NETWORK_CONFIG_PATH = Path(r"C:\.stoneworld\db\network.json")
 _TUNNEL_AGENTS: Dict[str, TunnelAgent] = {}
 _RELAY_UNSUPPORTED_CACHE: Dict[str, float] = {}
 _RELAY_CLIENT_PROXIES: Dict[str, RelayClientProxy] = {}
+
+def _get_remote_launcher_version() -> str:
+    session = requests.Session()
+    session.trust_env = False  # отключает системные Proxy Windows
+
+    try:
+        response = session.get(
+            LAUNCHER_VERSION_URL,
+            timeout=UPDATE_CHECK_TIMEOUT,
+            headers={"User-Agent": "StoneLauncher/1.0"},
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        version = str(data.get("version") or "").strip()
+        return version
+
+    except KeyboardInterrupt:
+        logger.warning("Проверка версии лаунчера была прервана")
+        return ""
+
+    except requests.exceptions.Timeout:
+        logger.warning("Таймаут при проверке версии лаунчера")
+        return ""
+
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Не удалось проверить версию лаунчера: %s", exc)
+        return ""
+
+    except ValueError:
+        logger.warning("GitHub вернул некорректный JSON версии лаунчера")
+        return ""
+
+    except Exception as exc:
+        logger.warning("Неожиданная ошибка проверки версии лаунчера: %s", exc)
+        return ""
 
 def _load_network_config():
     defaults = {
@@ -345,13 +384,45 @@ def set_local_minecraft_port(room_id: str = "", port: int = 0):
 
 @eel.expose
 def get_my_public_ip():
-    ip = _detect_public_ip()
-    if not ip:
-        return {"ok": False, "error": "public_ip_not_detected"}
-    cfg = _load_network_config()
-    cfg["last_public_ip"] = ip
-    _save_network_config(cfg)
-    return {"ok": True, "ip": ip}
+    try:
+        ip = _detect_public_ip()
+
+        if not ip:
+            cfg = _load_network_config()
+            cached_ip = str(cfg.get("last_public_ip") or "").strip()
+
+            if cached_ip:
+                return {
+                    "ok": True,
+                    "ip": cached_ip,
+                    "cached": True,
+                    "warning": "Не удалось обновить публичный IP, использован сохранённый."
+                }
+
+            return {
+                "ok": False,
+                "ip": "",
+                "error": "public_ip_not_detected"
+            }
+
+        cfg = _load_network_config()
+        cfg["last_public_ip"] = ip
+        _save_network_config(cfg)
+
+        return {
+            "ok": True,
+            "ip": ip,
+            "cached": False
+        }
+
+    except Exception as exc:
+        logger.exception("Ошибка get_my_public_ip")
+        return {
+            "ok": False,
+            "ip": "",
+            "error": str(exc) or "public_ip_error"
+        }
+
 @eel.expose
 def get_my_lan_ip():
     return {"ok": True, "ip": _detect_local_ip()}
@@ -396,29 +467,56 @@ def get_connection_plan(room_id=""):
     probe = test_room_connection(room_id)
     if not probe.get("ok"):
         return probe
+
     if probe.get("reachable"):
-        return {"ok": True, "mode": "direct", "endpoint": probe.get("endpoint")}
-    turn = get_turn_credentials()
-    api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+        return {
+            "ok": True,
+            "mode": "direct",
+            "endpoint": probe.get("endpoint")
+        }
+
     cfg = _load_network_config()
-    join_payload = {"user_id": str(cfg.get("user_id") or "").strip()}
-    relay_join = _relay_room_request(room_id, "join", payload=join_payload) if room_id else {"ok": False, "error": "room_empty"}
+    api_prefix = "/" + str(cfg.get("api_prefix") or "/launcher").strip().strip("/")
+
+    room = str(room_id or cfg.get("active_room") or "").strip()
+    if not room:
+        return {"ok": False, "error": "room_empty"}
+
+    turn = get_turn_credentials()
+
+    join_payload = {
+        "user_id": str(cfg.get("user_id") or cfg.get("client_id") or "").strip()
+    }
+
+    relay_join = _relay_room_request(room, "join", payload=join_payload)
+
     if relay_join.get("ok"):
         r = relay_join.get("data") or {}
-        room_key = str(room_id)
+        room_key = str(room)
+
         old_proxy = _RELAY_CLIENT_PROXIES.get(room_key)
         if old_proxy:
             old_proxy.stop()
+
         local_port = 25595
-        proxy = RelayClientProxy(
-            relay_host=str(r.get("relay_host") or ""),
-            relay_port=int(r.get("relay_port") or 0),
-            room_id=room_key,
-            join_token=str(r.get("join_token") or ""),
-            local_port=local_port,
-        )
-        proxy.start()
-        _RELAY_CLIENT_PROXIES[room_key] = proxy
+
+        try:
+            proxy = RelayClientProxy(
+                relay_host=str(r.get("relay_host") or ""),
+                relay_port=int(r.get("relay_port") or 0),
+                room_id=room_key,
+                join_token=str(r.get("join_token") or ""),
+                local_port=local_port,
+            )
+            proxy.start()
+            _RELAY_CLIENT_PROXIES[room_key] = proxy
+        except Exception as exc:
+            logger.exception("Не удалось запустить relay proxy")
+            return {
+                "ok": False,
+                "error": f"relay_proxy_start_failed: {exc}"
+            }
+
         return {
             "ok": True,
             "mode": "relay_tcp",
@@ -432,9 +530,9 @@ def get_connection_plan(room_id=""):
                 "port": r.get("relay_port"),
                 "address": f"{r.get('relay_host')}:{r.get('relay_port')}",
             },
-            "join_token": r.get("join_token"),
             "hint": "Direct недоступен, запущен локальный relay proxy 127.0.0.1.",
         }
+
     return {
         "ok": False,
         "error": "direct_unreachable_no_tcp_relay",
@@ -442,10 +540,7 @@ def get_connection_plan(room_id=""):
         "turn_available": bool(turn.get("ok")),
         "turn_error": turn.get("error"),
         "relay_error": relay_join.get("error"),
-        "hint": "Нужен VPN/туннель (WireGuard/Radmin/Hamachi/playit.gg) или встроенный TCP relay.",
-        "next_actions": [
-            "См. docs/network-tunnel-integration.md для внедрения собственного tunnel-agent + relay server",
-        ],
+        "hint": "Нужен VPN/туннель или встроенный TCP relay.",
     }
     
 @eel.expose
@@ -525,13 +620,42 @@ def get_tunnel_agent_status(room_id=""):
     return {"ok": True, "room_id": room, "running": True, **agent.status()}
 
 def _download_file_to_target(url: str, target_path: Path) -> None:
+    url = str(url or "").strip()
+
+    if not url.startswith("https://"):
+        raise ValueError("Разрешены только HTTPS-ссылки для скачивания файлов")
+
+    target_path = Path(target_path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(url, stream=True, timeout=REQUEST_TIMEOUT) as response:
-        response.raise_for_status()
-        with open(target_path, "wb") as file:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    file.write(chunk)
+
+    tmp_path = target_path.with_suffix(target_path.suffix + ".tmp")
+
+    session = requests.Session()
+    session.trust_env = False
+
+    try:
+        with session.get(
+            url,
+            stream=True,
+            timeout=REQUEST_TIMEOUT,
+            headers={"User-Agent": "StoneLauncher/1.0"},
+        ) as response:
+            response.raise_for_status()
+
+            with tmp_path.open("wb") as file:
+                for chunk in response.iter_content(chunk_size=1024 * 128):
+                    if chunk:
+                        file.write(chunk)
+
+        tmp_path.replace(target_path)
+
+    except Exception:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            pass
+        raise
                     
 _PUBLIC_IP_ENDPOINTS = (
     "https://api.ipify.org?format=json",
@@ -539,27 +663,64 @@ _PUBLIC_IP_ENDPOINTS = (
     "https://ipv4.icanhazip.com/",
 )
 
+def _is_valid_public_ip(value: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(str(value).strip())
+        return (
+            ip.version == 4
+            and not ip.is_private
+            and not ip.is_loopback
+            and not ip.is_reserved
+            and not ip.is_multicast
+            and not ip.is_link_local
+        )
+    except ValueError:
+        return False
 
 def _detect_public_ip(timeout: float = 4.0) -> Optional[str]:
+    """
+    Безопасно получает публичный IPv4.
+    Не использует системные Proxy Windows, чтобы не зависать в proxy_bypass_registry.
+    """
+    session = requests.Session()
+    session.trust_env = False
+
     for url in _PUBLIC_IP_ENDPOINTS:
         try:
-            req = urllib.request.Request(
+            response = session.get(
                 url,
+                timeout=(3, timeout),
                 headers={"User-Agent": "StoneLauncher/1.0"},
             )
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                raw = resp.read().decode("utf-8", "ignore").strip()
-                if not raw:
-                    continue
-                if raw.startswith("{"):
-                    data = json.loads(raw)
-                    ip = data.get("ip") or data.get("address")
-                    if ip:
-                        return ip.strip()
-                else:
-                    return raw.strip()
-        except (urllib.error.URLError, socket.timeout, ValueError):
+            response.raise_for_status()
+
+            raw = response.text.strip()
+            if not raw:
+                continue
+
+            if raw.startswith("{"):
+                data = response.json()
+                ip = str(data.get("ip") or data.get("address") or "").strip()
+            else:
+                ip = raw.strip()
+
+            if _is_valid_public_ip(ip):
+                return ip
+
+        except (
+            requests.exceptions.RequestException,
+            ValueError,
+            KeyError,
+            TypeError,
+            socket.timeout,
+            socket.gaierror,
+            socket.herror,
+            TimeoutError,
+            OSError,
+        ) as exc:
+            logger.warning("Не удалось получить публичный IP через %s: %s", url, exc)
             continue
+
     return None
 
 
@@ -655,14 +816,45 @@ def register_network_extensions(
     # ----------------------------------------------------------------- #
 
     @eel.expose
-    def get_my_public_ip() -> dict:
-        ip = _detect_public_ip()
-        if not ip:
-            return {"ok": False, "error": "could not detect public IP"}
-        cfg = load_cfg() or {}
-        cfg["last_public_ip"] = ip
-        save_cfg(cfg)
-        return {"ok": True, "ip": ip}
+    def get_my_public_ip():
+        try:
+            ip = _detect_public_ip()
+
+            if not ip:
+                cfg = _load_network_config()
+                cached_ip = str(cfg.get("last_public_ip") or "").strip()
+
+                if cached_ip:
+                    return {
+                        "ok": True,
+                        "ip": cached_ip,
+                        "cached": True,
+                        "warning": "Не удалось обновить публичный IP, использован сохранённый."
+                    }
+
+                return {
+                    "ok": False,
+                    "ip": "",
+                    "error": "public_ip_not_detected"
+                }
+
+            cfg = _load_network_config()
+            cfg["last_public_ip"] = ip
+            _save_network_config(cfg)
+
+            return {
+                "ok": True,
+                "ip": ip,
+                "cached": False
+            }
+
+        except Exception as exc:
+            logger.exception("Ошибка get_my_public_ip")
+            return {
+                "ok": False,
+                "ip": "",
+                "error": str(exc) or "public_ip_error"
+            }
 
     @eel.expose
     def ping_address(host: str, port: int = 25565, attempts: int = 3) -> dict:
@@ -1245,6 +1437,21 @@ def check_launcher_files_integrity():
             continue
 
         target_path = Path(file_path) / file_name
+
+        if not _is_safe_target_path(target_path):
+            logger.warning("Небезопасный путь установки файла: %s", target_path)
+            summary["checked"] = index
+            try:
+                eel.updateIntegrityProgress({
+                    "checked": index,
+                    "total": total,
+                    "status": "skipped",
+                    "file": file_name,
+                    "message": "Файл пропущен: небезопасный путь установки."
+                })
+            except Exception:
+                logger.debug("Не удалось отправить прогресс проверки в UI", exc_info=True)
+            continue
         exists_before = target_path.exists()
         installed_now = False
         state = "ok" if exists_before else "installing"
@@ -1304,6 +1511,46 @@ def check_launcher_files_integrity():
         )
 
     return summary
+
+def _is_safe_target_path(target_path: Path) -> bool:
+    allowed_roots = [
+        Path(r"C:\.stoneworld").resolve(),
+        Path(minecraft_directory).resolve(),
+    ]
+
+    try:
+        resolved = target_path.resolve()
+    except OSError:
+        return False
+
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root)
+            return True
+        except ValueError:
+            continue
+
+    return False
+
+def _is_safe_target_path(target_path: Path) -> bool:
+    allowed_roots = [
+        Path(r"C:\.stoneworld").resolve(),
+        Path(minecraft_directory).resolve(),
+    ]
+
+    try:
+        resolved = target_path.resolve()
+    except OSError:
+        return False
+
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root)
+            return True
+        except ValueError:
+            continue
+
+    return False
     
 @eel.expose
 def check_server_info(ip):
@@ -1470,30 +1717,27 @@ def add_time(date, hour):
 
 @eel.expose
 def check_version_launcher():
-    conn = create_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute('''SELECT version FROM launcher''')
-    launcher = cursor.fetchall()
-    conn.close()
-    
-    url_version = "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/launcher.json"
-    
-    proxies = {
-        "http": None,
-        "https": None
-    }
-    
     try:
-        response = requests.get(
-            url=url_version, proxies=proxies, timeout=REQUEST_TIMEOUT
-        )
-        response.raise_for_status()
-        json_data = response.json()
-        launcher_version = launcher[0][0] if launcher else None
+        conn = create_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""SELECT version FROM launcher""")
+        launcher = cursor.fetchall()
+        conn.close()
 
-        return launcher_version != json_data['version']
-    except requests.exceptions.RequestException:
-        logger.exception("Не удалось проверить версию лаунчера")
+        local_version = str(launcher[0][0]) if launcher else ""
+        remote_version = _get_remote_launcher_version()
+
+        if not remote_version:
+            return False
+
+        return local_version != remote_version
+
+    except KeyboardInterrupt:
+        logger.warning("check_version_launcher был прерван")
+        return False
+
+    except Exception:
+        logger.exception("Ошибка check_version_launcher")
         return False
     
 def start_check_version_launcher():
@@ -1509,22 +1753,22 @@ def start_check_version_launcher():
         return False
 
 def update_last_version_launcher():
-    
-    url_version = "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/launcher.json"
+    version = _get_remote_launcher_version()
+
+    if not version:
+        return False
+
     try:
-        response = requests.get(url_version, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        json_data = response.json()
-        version = json_data['version']
-    except requests.exceptions.RequestException:
-        logger.exception("Не удалось обновить версию лаунчера")
-        return
-    
-    conn = create_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute('''UPDATE launcher SET version = ?''', (version,))
-    conn.commit()
-    conn.close()
+        conn = create_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""UPDATE launcher SET version = ?""", (version,))
+        conn.commit()
+        conn.close()
+        return True
+
+    except Exception:
+        logger.exception("Не удалось сохранить последнюю версию лаунчера")
+        return False
 
 def add_version_launcher():
     conn = create_connection(db_path)
@@ -2000,4 +2244,172 @@ def delete_installed_mod(version_name, mod_name):
     if not target.exists() or target.suffix.lower() != ".jar":
         return {"ok": False, "error": "Мод не найден"}
     target.unlink()
+    return {"ok": True}
+
+
+# ---------- Resource packs & shaders ----------
+def _resourcepacks_dir(version_name):
+    return Path(minecraft_directory) / version_name / "resourcepacks"
+
+
+def _shaderpacks_dir(version_name):
+    return Path(minecraft_directory) / version_name / "shaderpacks"
+
+
+_CONTENT_DIRS = {
+    "mod": (_mods_dir, (".jar",)),
+    "resourcepack": (_resourcepacks_dir, (".zip",)),
+    "shader": (_shaderpacks_dir, (".zip",)),
+}
+
+_PROJECT_TYPE_FACET = {
+    "mod": "mod",
+    "resourcepack": "resourcepack",
+    "shader": "shader",
+}
+
+
+def _content_dir(content_type, version_name):
+    resolver, _ = _CONTENT_DIRS.get(content_type, (_mods_dir, (".jar",)))
+    return resolver(version_name)
+
+
+@eel.expose
+def list_installed_content(content_type, version_name):
+    """Список установленных модов/ресурспаков/шейдеров для сборки."""
+    content_type = str(content_type or "mod").lower()
+    resolver, exts = _CONTENT_DIRS.get(content_type, (_mods_dir, (".jar",)))
+    path = resolver(version_name)
+    if not path.exists():
+        return []
+    out = []
+    for file in sorted(path.iterdir()):
+        if file.is_file() and file.suffix.lower() in exts:
+            out.append({"name": file.name, "size": file.stat().st_size})
+    return out
+
+
+@eel.expose
+def search_content(content_type, query, game_version, loader, limit=24, index='relevance'):
+    """Поиск контента на Modrinth с фильтром по типу проекта."""
+    content_type = str(content_type or "mod").lower()
+    project_type = _PROJECT_TYPE_FACET.get(content_type, "mod")
+    query = query or ''
+    game_version = str(game_version or '').strip()
+    loader = str(loader or '').strip()
+    limit = max(1, min(int(limit or 24), 50))
+
+    facets = [f'["project_type:{project_type}"]']
+    if game_version:
+        facets.append(f'["versions:{game_version}"]')
+    # Загрузчик важен только для модов; ресурспаки/шейдеры от него не зависят.
+    if loader and content_type == "mod":
+        facets.append(f'["categories:{loader}"]')
+    facets_str = '[' + ','.join(facets) + ']'
+
+    url = "https://api.modrinth.com/v2/search"
+    params = {"query": query, "limit": limit, "index": index, "facets": facets_str}
+    try:
+        r = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+    except Exception as exc:
+        logger.exception("Ошибка поиска контента Modrinth")
+        return {"ok": False, "error": str(exc), "results": []}
+    hits = r.json().get('hits', [])
+    url_kind = {"mod": "mod", "resourcepack": "resourcepack", "shader": "shader"}.get(content_type, "mod")
+    results = [
+        {
+            "provider": "modrinth",
+            "project_id": h.get('project_id'),
+            "slug": h.get('slug'),
+            "title": h.get('title'),
+            "description": h.get('description'),
+            "icon": h.get('icon_url'),
+            "downloads": h.get('downloads', 0),
+            "author": h.get('author'),
+            "categories": h.get('categories', []),
+            "url": f"https://modrinth.com/{url_kind}/{h.get('slug') or h.get('project_id')}",
+        }
+        for h in hits
+    ]
+    return {"ok": True, "results": results}
+
+
+@eel.expose
+def install_content(content_type, provider, project_id, version_name, game_version, loader):
+    """Установка мода/ресурспака/шейдера в папку соответствующей сборки."""
+    content_type = str(content_type or "mod").lower()
+    resolver, exts = _CONTENT_DIRS.get(content_type, (_mods_dir, (".jar",)))
+    target_dir = resolver(version_name)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    if (provider or "modrinth").lower() != 'modrinth':
+        return {"ok": False, "error": "Провайдер пока не поддерживается"}
+
+    url = f"https://api.modrinth.com/v2/project/{project_id}/version"
+    try:
+        r = requests.get(url, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+    except Exception as exc:
+        logger.exception("Ошибка получения версий проекта %s", project_id)
+        return {"ok": False, "error": str(exc)}
+
+    versions = r.json()
+    selected = None
+    fallback = None
+    for ver in versions:
+        if game_version and game_version not in ver.get('game_versions', []):
+            continue
+        # Для ресурспаков и шейдеров фильтр по загрузчику не применяем.
+        if content_type == "mod" and loader and loader not in ver.get('loaders', []):
+            continue
+        selected = ver
+        break
+    if not selected:
+        # Версия мода под точную версию игры не найдена — пробуем любую совместимую по загрузчику.
+        for ver in versions:
+            if content_type == "mod" and loader and loader not in ver.get('loaders', []):
+                continue
+            fallback = ver
+            break
+    chosen = selected or fallback
+    if not chosen:
+        return {"ok": False, "error": "Не найдена подходящая версия"}
+
+    files = chosen.get('files', [])
+    file_obj = next((f for f in files if f.get('primary')), None) or (files[0] if files else None)
+    if not file_obj:
+        return {"ok": False, "error": "Файл отсутствует"}
+
+    filename = Path(str(file_obj.get('filename') or "")).name
+    if not filename:
+        return {"ok": False, "error": "Некорректное имя файла"}
+    target = target_dir / filename
+    try:
+        _download_file_to_target(file_obj.get('url'), target)
+    except Exception as exc:
+        logger.exception("Ошибка загрузки контента %s", filename)
+        return {"ok": False, "error": str(exc)}
+    return {
+        "ok": True,
+        "name": filename,
+        "size": target.stat().st_size,
+        "exact": selected is not None,
+        "installed_at": datetime.utcnow().isoformat(),
+    }
+
+
+@eel.expose
+def delete_installed_content(content_type, version_name, item_name):
+    """Удаление установленного мода/ресурспака/шейдера."""
+    content_type = str(content_type or "mod").lower()
+    resolver, exts = _CONTENT_DIRS.get(content_type, (_mods_dir, (".jar",)))
+    path = resolver(version_name)
+    target = path / Path(str(item_name or "")).name
+    if not target.exists() or target.suffix.lower() not in exts:
+        return {"ok": False, "error": "Файл не найден"}
+    try:
+        target.unlink()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
     return {"ok": True}

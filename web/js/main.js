@@ -501,6 +501,7 @@ let externalLogsOpened = false;
 let openLogViewerEnabled = true;
 let launcherAccounts = [];
 let launcherVersions = [];
+let launcherUpdateCheckRunning = false;
 const skinFaceCache = new Map();
 const DEFAULT_STEVE_FACE = `data:image/png;base64,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`;
 
@@ -2211,23 +2212,33 @@ async function renderUpdatesFeed() {
     // wire up download in news
     const ndb = document.getElementById("news-download-btn");
     if (ndb) {
-        ndb.addEventListener("click", () => {
+        ndb.addEventListener("click", async () => {
             try {
-                eel.check_version_launcher()((isUpToDate) => {
-                    if (isUpToDate) {
-                        eel.downolad_launcher_version();
-                        window.close();
+                try {
+                    const hasUpdate = await eel.check_version_launcher()();
+
+                    if (hasUpdate) {
                         toast({
                             title: "Загрузка обновления...",
                             type: "info",
                         });
+
+                        await eel.downolad_launcher_version()();
+                        window.close();
                     } else {
                         toast({
                             title: "Установлена актуальная версия",
                             type: "success",
                         });
                     }
-                });
+                } catch (error) {
+                    console.warn("[SLauncher] Не удалось скачать обновление:", error);
+                    toast({
+                        title: "Не удалось проверить обновление",
+                        message: "Проверьте интернет-соединение.",
+                        type: "error",
+                    });
+                }
             } catch (e) {
                 toast({
                     title: "Уже установлена последняя версия",
@@ -2292,25 +2303,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const checkBtn = document.getElementById("check-updates-btn");
     if (checkBtn) {
-        checkBtn.addEventListener("click", () => {
+        checkBtn.addEventListener("click", async () => {
             toast({ title: "Проверка обновлений...", type: "info" });
-            try {
-                eel.check_version_launcher()((isUpToDate) => {
-                    if (isUpToDate) {
-                        showUpdateModal();
-                    } else {
-                        toast({
-                            title: "Установлена актуальная версия",
-                            type: "success",
-                        });
-                    }
-                });
-            } catch (e) {
-                toast({
-                    title: "Установлена актуальная версия",
-                    type: "success",
-                });
-            }
+            await checkLauncher(true);
         });
     }
 });
@@ -2358,12 +2353,41 @@ try {
 } catch (e) {}
 
 // ---------- Update modal ----------
-function checkLauncher() {
+async function checkLauncher(showToast = false) {
+    if (launcherUpdateCheckRunning) return false;
+    launcherUpdateCheckRunning = true;
+
     try {
-        eel.check_version_launcher()((isUpToDate) => {
-            if (isUpToDate) showUpdateModal();
-        });
-    } catch (e) {}
+        const hasUpdate = await eel.check_version_launcher()();
+
+        if (hasUpdate) {
+            showUpdateModal();
+            return true;
+        }
+
+        if (showToast) {
+            toast({
+                title: "Установлена актуальная версия",
+                type: "success",
+            });
+        }
+
+        return false;
+    } catch (error) {
+        console.warn("[SLauncher] Не удалось проверить обновление:", error);
+
+        if (showToast) {
+            toast({
+                title: "Проверка обновлений недоступна",
+                message: "Лаунчер продолжит работу без проверки.",
+                type: "info",
+            });
+        }
+
+        return false;
+    } finally {
+        launcherUpdateCheckRunning = false;
+    }
 }
 
 function showUpdateModal() {
@@ -2433,9 +2457,9 @@ function showErrorMessage() {
     };
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    checkLauncher();
-});
+// document.addEventListener("DOMContentLoaded", () => {
+//     checkLauncher();
+// });
 
 function send_process_status(status) {
     console.log(status);
@@ -2966,6 +2990,33 @@ function openExternalUrl(url) {
 
 let openModpackModal = null;
 
+const CONTENT_META = {
+    mod: {
+        catalog: "Доступные моды",
+        installed: "Установленные моды",
+        searchPlaceholder: "Поиск мода...",
+        emptyInstalled: "Пока нет установленных модов",
+        icon: "fa-puzzle-piece",
+        urlKind: "mod",
+    },
+    resourcepack: {
+        catalog: "Доступные текстуры",
+        installed: "Установленные текстуры",
+        searchPlaceholder: "Поиск текстур-пака...",
+        emptyInstalled: "Пока нет установленных текстур",
+        icon: "fa-image",
+        urlKind: "resourcepack",
+    },
+    shader: {
+        catalog: "Доступные шейдеры",
+        installed: "Установленные шейдеры",
+        searchPlaceholder: "Поиск шейдеров...",
+        emptyInstalled: "Пока нет установленных шейдеров",
+        icon: "fa-wand-magic-sparkles",
+        urlKind: "shader",
+    },
+};
+
 document.addEventListener("DOMContentLoaded", () => {
     const modal = document.getElementById("modpack-modal");
     const openBtn = document.getElementById("open-modpack-creator");
@@ -2977,12 +3028,26 @@ document.addEventListener("DOMContentLoaded", () => {
     const saveRow = document.getElementById("modpack-save-row");
     const saveBtn = document.getElementById("modpack-save-btn");
 
+    const stepsEl = document.getElementById("modpack-steps");
+    const metaEl = modal?.querySelector(".modpack-meta");
+    const topEl = modal?.querySelector(".modpack-top");
     const manageTools = document.getElementById("modpack-manage-tools");
     const createNote = document.getElementById("modpack-create-note");
     const versionSelect = document.getElementById("modpack-version");
     const loaderSelect = document.getElementById("modpack-loader");
     const nameInput = document.getElementById("modpack-name");
     const descInput = document.getElementById("modpack-description");
+
+    const contentTabs = document.getElementById("content-type-tabs");
+    const contentTabBtns =
+        contentTabs?.querySelectorAll(".content-type-tab") || [];
+    const modTabsEl = modal?.querySelector(".mod-tabs");
+    const modsLayoutEl = modal?.querySelector(".modpack-mods-layout");
+    const catalogTitle = document.getElementById("catalog-title");
+    const installedTitle = document.getElementById("installed-title");
+    const infoTitle = document.getElementById("modpack-info-title");
+    const infoSub = document.getElementById("modpack-info-sub");
+    const loaderPill = document.getElementById("modpack-loader-pill");
 
     const providerTabs = modal?.querySelectorAll(".mod-tabs .filter-tab") || [];
     const searchInput = document.getElementById("mod-search");
@@ -2991,6 +3056,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let provider = "modrinth";
     let currentManagedBuildId = "";
+    let contentType = "mod";
+    let currentBuildMeta = null;
 
     openBtn?.addEventListener("click", () => openModpackModal("create"));
     closeBtn?.addEventListener("click", closeModpackModal);
@@ -2999,34 +3066,95 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.target === modal) closeModpackModal();
     });
 
-    versionSelect?.addEventListener("change", onVersionChange);
+    versionSelect?.addEventListener("change", () => {
+        onVersionChange();
+        updateSteps();
+    });
+    loaderSelect?.addEventListener("change", updateSteps);
+    nameInput?.addEventListener("input", updateSteps);
     saveBtn?.addEventListener("click", saveCustomModpack);
-    searchInput?.addEventListener("input", debounce(loadAvailableMods, 350));
+    searchInput?.addEventListener("input", debounce(loadAvailableContent, 350));
+
+    function updateSteps() {
+        if (!stepsEl || modeInput.value !== "create") return;
+        const steps = stepsEl.querySelectorAll(".modpack-step");
+        const hasName = nameInput.value.trim().length > 0;
+        const hasCore = !!versionSelect.value && !!loaderSelect.value;
+        steps.forEach((s) => {
+            const n = Number(s.dataset.step);
+            const done =
+                (n === 1 && hasName) ||
+                (n === 2 && hasCore) ||
+                (n === 3 && hasName && hasCore);
+            s.classList.toggle("active", done);
+        });
+    }
 
     providerTabs.forEach((tab) => {
         tab.addEventListener("click", () => {
             providerTabs.forEach((t) => t.classList.remove("active"));
             tab.classList.add("active");
             provider = tab.dataset.provider || "modrinth";
-            loadAvailableMods();
+            loadAvailableContent();
         });
     });
+
+    contentTabBtns.forEach((tab) => {
+        tab.addEventListener("click", () => {
+            contentTabBtns.forEach((t) => t.classList.remove("active"));
+            tab.classList.add("active");
+            contentType = tab.dataset.content || "mod";
+            applyContentLabels();
+            searchInput.value = "";
+            loadAvailableContent();
+            loadInstalledContent();
+        });
+    });
+
+    function applyContentLabels() {
+        const meta = CONTENT_META[contentType] || CONTENT_META.mod;
+        if (catalogTitle) catalogTitle.textContent = meta.catalog;
+        if (installedTitle) installedTitle.textContent = meta.installed;
+        if (searchInput) searchInput.placeholder = meta.searchPlaceholder;
+        // Шейдеры и текстуры доступны не только для Forge/Fabric — подсказка
+        contentTabBtns.forEach((t) =>
+            t.classList.toggle("active", t.dataset.content === contentType),
+        );
+    }
+
+    function setCreateUiVisible(visible) {
+        if (stepsEl) stepsEl.style.display = visible ? "flex" : "none";
+        if (metaEl) metaEl.style.display = visible ? "grid" : "none";
+        if (topEl) topEl.style.display = visible ? "grid" : "none";
+    }
+
+    function setManageUiVisible(visible) {
+        if (contentTabs) contentTabs.style.display = visible ? "flex" : "none";
+        if (modTabsEl) modTabsEl.style.display = visible ? "flex" : "none";
+        if (modsLayoutEl)
+            modsLayoutEl.style.display = visible ? "grid" : "none";
+        if (manageTools) manageTools.style.display = visible ? "block" : "none";
+    }
 
     openModpackModal = function (mode, modpackData = null) {
         if (!modal) return;
         modeInput.value = mode;
         editIdInput.value = modpackData?.id || modpackData?.build_id || "";
         currentManagedBuildId = editIdInput.value;
+        currentBuildMeta = modpackData;
         provider = modpackData?.provider || "modrinth";
+        contentType = "mod";
         modal.classList.remove("hidden");
         resetModpackFormState();
+        applyContentLabels();
 
         if (mode === "create") {
             modalTitle.textContent = "Создать сборку";
             modalSubtitle.textContent =
-                "Название → описание → версия → Forge/Fabric → Создать";
-            saveBtn.innerHTML = '<i class="fas fa-plus"></i> Создать';
-            manageTools.style.display = "none";
+                "Название → версия → Forge/Fabric → создайте сборку";
+            saveBtn.innerHTML = '<i class="fas fa-plus"></i> Создать сборку';
+            setCreateUiVisible(true);
+            setManageUiVisible(false);
             saveRow.style.display = "flex";
             nameInput.disabled = false;
             descInput.disabled = false;
@@ -3038,8 +3166,9 @@ document.addEventListener("DOMContentLoaded", () => {
             modalSubtitle.textContent =
                 modpackData.name || modpackData.id || "Сборка";
             saveBtn.innerHTML =
-                '<i class="fas fa-save"></i> Сохранить описание';
-            manageTools.style.display = "block";
+                '<i class="fas fa-save"></i> Сохранить';
+            setCreateUiVisible(false);
+            setManageUiVisible(true);
             saveRow.style.display = "flex";
             nameInput.value = modpackData.name || "";
             descInput.value = modpackData.description || modpackData.desc || "";
@@ -3051,14 +3180,22 @@ document.addEventListener("DOMContentLoaded", () => {
             versionSelect.disabled = true;
             loaderSelect.disabled = true;
             descInput.disabled = false;
+            if (infoTitle) infoTitle.textContent = modpackData.name || "Сборка";
+            if (infoSub)
+                infoSub.textContent = `Minecraft ${modpackData.version || "?"}`;
+            if (loaderPill) {
+                const isFabric = modpackData.loader === "fabric";
+                loaderPill.textContent = isFabric ? "Fabric" : "Forge";
+                loaderPill.className = `modpack-loader-pill ${isFabric ? "fabric" : "forge"}`;
+            }
             providerTabs.forEach((tab) =>
                 tab.classList.toggle(
                     "active",
                     tab.dataset.provider === provider,
                 ),
             );
-            loadAvailableMods();
-            loadInstalledMods();
+            loadAvailableContent();
+            loadInstalledContent();
         }
     };
 
@@ -3130,7 +3267,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 loaderSelect.appendChild(opt);
             });
             if (createNote)
-                createNote.textContent = `Доступно: ${loaders.map((l) => (l === "fabric" ? "Fabric" : "Forge")).join(", ")}`;
+                createNote.innerHTML = `<i class="fas fa-check"></i> Доступно: ${loaders.map((l) => (l === "fabric" ? "Fabric" : "Forge")).join(", ")}`;
         } catch (e) {
             loaderSelect.innerHTML =
                 '<option value="">Ошибка проверки</option>';
@@ -3170,7 +3307,9 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             toast({
                 title: isManage ? "Описание обновлено" : "Сборка создана",
-                message: result.build?.name || payload.name,
+                message: isManage
+                    ? result.build?.name || payload.name
+                    : "Нажмите «Установить» в списке сборок, затем «Настроить» для модов",
                 type: "success",
             });
             closeModpackModal();
@@ -3182,45 +3321,57 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    async function loadAvailableMods() {
+    function contentUrl(item) {
+        const meta = CONTENT_META[contentType] || CONTENT_META.mod;
+        return (
+            item?.url ||
+            `https://modrinth.com/${meta.urlKind}/${item?.slug || item?.project_id || ""}`
+        );
+    }
+
+    async function loadAvailableContent() {
         const version = versionSelect.value;
         const loader = loaderSelect.value;
-        if (!version || !loader || modeInput.value !== "manage") return;
+        if (modeInput.value !== "manage" || !version) return;
         resultsEl.innerHTML =
             '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
         try {
-            const mods = await eel.search_mods(
-                provider,
+            const res = await eel.search_content(
+                contentType,
                 searchInput.value,
                 version,
                 loader,
-                20,
+                24,
                 "downloads",
             )();
+            const items = (res && res.results) || [];
             document.getElementById("mods-count-badge").textContent =
-                mods.length;
-            resultsEl.innerHTML =
-                mods
-                    .map(
-                        (m) => `
-                <div class="mod-result-card" data-url="${escapeHtml(getModrinthUrl(m))}">
-                    <div class="mod-result-icon">${m.icon ? `<img src="${escapeHtml(m.icon)}" alt="">` : '<i class="fas fa-cube"></i>'}</div>
+                items.length;
+            if (!items.length) {
+                resultsEl.innerHTML =
+                    '<div class="mod-empty"><i class="fas fa-search"></i><p>Ничего не найдено</p></div>';
+                return;
+            }
+            resultsEl.innerHTML = items
+                .map(
+                    (m) => `
+                <div class="mod-result-card" data-url="${escapeHtml(contentUrl(m))}">
+                    <div class="mod-result-icon">${m.icon ? `<img src="${escapeHtml(m.icon)}" alt="">` : `<i class="fas ${CONTENT_META[contentType].icon}"></i>`}</div>
                     <div class="mod-result-info">
                         <div class="mod-result-name">${escapeHtml(m.title || "Без названия")}</div>
                         <div class="mod-result-author">${escapeHtml(m.author || "")}</div>
                         <div class="mod-result-meta">
-                            <span class="mod-result-version">${escapeHtml(version)} / ${escapeHtml(loader)}</span>
+                            <span class="mod-result-version">${escapeHtml(version)}${contentType === "mod" && loader ? " / " + escapeHtml(loader) : ""}</span>
                             <span class="mod-result-downloads"><i class="fas fa-download"></i> ${Number(m.downloads || 0).toLocaleString("ru-RU")}</span>
                         </div>
                     </div>
                     <div class="mod-result-action">
-                        <button class="mod-link-btn" data-url="${escapeHtml(getModrinthUrl(m))}"><i class="fas fa-arrow-up-right-from-square"></i></button>
+                        <button class="mod-link-btn" data-url="${escapeHtml(contentUrl(m))}" title="Открыть на Modrinth"><i class="fas fa-arrow-up-right-from-square"></i></button>
                         <button class="mod-install-btn" data-id="${escapeHtml(m.project_id)}">Установить</button>
                     </div>
                 </div>`,
-                    )
-                    .join("") ||
-                '<div class="mod-empty"><i class="fas fa-search"></i><p>Ничего не найдено</p></div>';
+                )
+                .join("");
 
             resultsEl.querySelectorAll(".mod-result-card").forEach((card) => {
                 card.addEventListener("click", () =>
@@ -3236,27 +3387,45 @@ document.addEventListener("DOMContentLoaded", () => {
             resultsEl.querySelectorAll(".mod-install-btn").forEach((btn) =>
                 btn.addEventListener("click", async function (e) {
                     e.stopPropagation();
-                    const modId = this.dataset.id;
+                    const projectId = this.dataset.id;
+                    const original = this.textContent;
                     this.textContent = "Установка...";
                     this.disabled = true;
                     try {
-                        const res = await eel.install_mod(
+                        const r = await eel.install_content(
+                            contentType,
                             provider,
-                            modId,
+                            projectId,
                             currentManagedBuildId,
                             version,
                             loader,
                         )();
-                        if (res.ok) {
+                        if (r.ok) {
                             this.textContent = "Установлено";
                             this.classList.add("installed");
-                            await loadInstalledMods();
+                            await loadInstalledContent();
+                            if (r.exact === false) {
+                                toast({
+                                    title: "Установлено",
+                                    message:
+                                        "Точная версия не найдена, установлена ближайшая совместимая",
+                                    type: "info",
+                                });
+                            }
                         } else {
                             this.textContent = "Ошибка";
+                            this.disabled = false;
+                            toast({
+                                title: "Не удалось установить",
+                                message: r.error || "",
+                                type: "error",
+                            });
+                            setTimeout(() => {
+                                this.textContent = original;
+                            }, 1500);
                         }
                     } catch (e) {
                         this.textContent = "Ошибка";
-                    } finally {
                         this.disabled = false;
                     }
                 }),
@@ -3267,30 +3436,35 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    async function loadInstalledMods() {
+    async function loadInstalledContent() {
         const buildId = currentManagedBuildId || editIdInput.value;
         if (!buildId) return;
+        const meta = CONTENT_META[contentType] || CONTENT_META.mod;
         try {
-            const list = await eel.list_installed_mods(buildId)();
+            const list =
+                (await eel.list_installed_content(contentType, buildId)()) ||
+                [];
             document.getElementById("installed-mods-count").textContent =
                 list.length;
-            installedList.innerHTML =
-                list
-                    .map((m) => {
-                        const cleanName = String(m.name || "").replace(
-                            /\.jar$/i,
-                            "",
-                        );
-                        const url = `https://modrinth.com/mods?q=${encodeURIComponent(cleanName)}`;
-                        return `
-                <div class="installed-mod-chip" data-url="${escapeHtml(url)}" title="Открыть поиск Modrinth">
-                    <span class="chip-icon">${m.icon ? `<img src="${escapeHtml(m.icon)}">` : '<i class="fas fa-cube"></i>'}</span>
+            if (!list.length) {
+                installedList.innerHTML = `<div class="mod-empty"><p>${meta.emptyInstalled}</p></div>`;
+                return;
+            }
+            installedList.innerHTML = list
+                .map((m) => {
+                    const cleanName = String(m.name || "").replace(
+                        /\.(jar|zip)$/i,
+                        "",
+                    );
+                    const url = `https://modrinth.com/${meta.urlKind}s?q=${encodeURIComponent(cleanName)}`;
+                    return `
+                <div class="installed-mod-chip" data-url="${escapeHtml(url)}" title="Найти на Modrinth">
+                    <span class="chip-icon"><i class="fas ${meta.icon}"></i></span>
                     <span class="chip-name">${escapeHtml(m.name)}</span>
-                    <span class="chip-remove" data-mod="${escapeHtml(m.name)}" title="Удалить"><i class="fas fa-times"></i></span>
+                    <span class="chip-remove" data-item="${escapeHtml(m.name)}" title="Удалить"><i class="fas fa-times"></i></span>
                 </div>`;
-                    })
-                    .join("") ||
-                '<div class="mod-empty"><p>Пока нет установленных модов</p></div>';
+                })
+                .join("");
 
             installedList
                 .querySelectorAll(".installed-mod-chip")
@@ -3302,13 +3476,18 @@ document.addEventListener("DOMContentLoaded", () => {
             installedList.querySelectorAll(".chip-remove").forEach((el) =>
                 el.addEventListener("click", async (e) => {
                     e.stopPropagation();
-                    const modName = el.dataset.mod;
+                    const itemName = el.dataset.item;
                     try {
-                        await eel.delete_installed_mod(buildId, modName)();
-                        await loadInstalledMods();
+                        await eel.delete_installed_content(
+                            contentType,
+                            buildId,
+                            itemName,
+                        )();
+                        await loadInstalledContent();
+                        await loadAvailableContent();
                         toast({
-                            title: "Мод удалён",
-                            message: modName,
+                            title: "Удалено",
+                            message: itemName,
                             type: "info",
                         });
                     } catch (err) {

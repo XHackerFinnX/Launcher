@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import subprocess
 import hashlib
@@ -28,6 +29,69 @@ def _resolve_forge_version(vanilla_version: str) -> str:
     if candidates:
         return candidates[0]
     raise RuntimeError(f"Не найдена совместимая Forge-версия для {vanilla_version}")
+
+BUILD_MANIFEST_NAME = "slauncher_build.json"
+
+
+def _read_json_file(path: str):
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except Exception:
+        return None
+
+
+def _detect_installed_core(minecraft_directory_version: str, base_version: str | None, prefer: str | None):
+    """Найти version_id установленного модового ядра по inheritsFrom."""
+    versions_path = os.path.join(minecraft_directory_version, "versions")
+    if not os.path.isdir(versions_path):
+        return None
+
+    candidates = []
+    for folder in os.listdir(versions_path):
+        folder_path = os.path.join(versions_path, folder)
+        if not os.path.isdir(folder_path):
+            continue
+        data = _read_json_file(os.path.join(folder_path, f"{folder}.json"))
+        if data and data.get("inheritsFrom"):
+            candidates.append((folder, data.get("inheritsFrom")))
+
+    if not candidates:
+        return None
+
+    def score(item):
+        folder, inherits = item
+        low = folder.lower()
+        value = 0
+        if base_version and inherits == base_version:
+            value += 2
+        if prefer and prefer in low:
+            value += 4
+        if "forge" in low or "fabric" in low:
+            value += 1
+        return value
+
+    candidates.sort(key=score, reverse=True)
+    return candidates[0][0]
+
+
+def _write_build_manifest(minecraft_directory_version: str, build_name: str,
+                          base_version: str, loader: str, version_id: str | None):
+    """Сохранить манифест сборки, чтобы запуск всегда находил нужное ядро."""
+    manifest = {
+        "build_name": build_name,
+        "base_version": base_version,
+        "loader": loader,
+        "version_id": version_id,
+    }
+    try:
+        with open(os.path.join(minecraft_directory_version, BUILD_MANIFEST_NAME),
+                  "w", encoding="utf-8") as file:
+            json.dump(manifest, file, ensure_ascii=False, indent=2)
+        logger.info("Манифест сборки сохранён: %s -> %s", build_name, version_id)
+    except Exception:
+        logger.exception("Не удалось сохранить манифест сборки %s", build_name)
+
 
 def set_status(status: str):
     if status:
@@ -83,17 +147,25 @@ def minecraft_download_version_build(version_fabric_forge: str):
     is_fabric_build = name.startswith('Fabric') or " fabric " in build_lower
     
     if not os.path.exists(minecraft_directory_version):
+        installed_loader = "vanilla"
+        installed_version_id = None
         try:
             logger.info("Начало установки сборки: %s", version_fabric_forge)
             if is_forge_build:
+                installed_loader = "forge"
                 version = _resolve_forge_version(version_null)
                 minecraft_launcher_lib.forge.install_forge_version(
                     versionid=version, 
                     path=minecraft_directory_version,
                     callback=callback
                 )
+                try:
+                    installed_version_id = minecraft_launcher_lib.forge.forge_to_installed_version(version)
+                except Exception:
+                    installed_version_id = None
             
             elif is_fabric_build:
+                installed_loader = "fabric"
                 if not minecraft_launcher_lib.fabric.is_minecraft_version_supported(version_null):
                     raise RuntimeError(f"Fabric не поддерживает версию Minecraft {version_null}")
                 loader_version = minecraft_launcher_lib.fabric.get_latest_loader_version()
@@ -103,15 +175,52 @@ def minecraft_download_version_build(version_fabric_forge: str):
                     loader_version=loader_version,
                     callback=callback
                 )
+                installed_version_id = f"fabric-loader-{loader_version}-{version_null}"
             
             elif name.startswith('ПВП') or name.startswith('LunarПВП'):
+                installed_loader = "forge"
                 version = _resolve_forge_version(version_null)
                 minecraft_launcher_lib.forge.install_forge_version(
                     versionid=version, 
                     path=minecraft_directory_version,
                     callback=callback
                 )
-                
+                try:
+                    installed_version_id = minecraft_launcher_lib.forge.forge_to_installed_version(version)
+                except Exception:
+                    installed_version_id = None
+            else:
+                # Чистая (ванильная) кастомная сборка без загрузчика
+                installed_loader = "vanilla"
+                minecraft_launcher_lib.install.install_minecraft_version(
+                    version=version_null,
+                    minecraft_directory=minecraft_directory_version,
+                    callback=callback
+                )
+                installed_version_id = version_null
+
+            # Если version_id не удалось получить напрямую — определяем сканированием.
+            if not installed_version_id or not os.path.isdir(
+                os.path.join(minecraft_directory_version, "versions", installed_version_id)
+            ):
+                prefer = "forge" if installed_loader == "forge" else (
+                    "fabric" if installed_loader == "fabric" else None
+                )
+                if prefer:
+                    detected = _detect_installed_core(minecraft_directory_version, version_null, prefer)
+                    if detected:
+                        installed_version_id = detected
+
+            # Записываем манифест сразу после установки ядра, до загрузки модов,
+            # чтобы запуск всегда мог найти корректное ядро.
+            _write_build_manifest(
+                minecraft_directory_version,
+                build_name=version_fabric_forge,
+                base_version=version_null,
+                loader=installed_loader,
+                version_id=installed_version_id,
+            )
+
             add_resourcepacks(minecraft_directory_version)
             add_mods(minecraft_directory_version)
             minecraft_directory_version_optifine = minecraft_directory_version + f'\\mods'

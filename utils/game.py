@@ -61,6 +61,106 @@ def _offline_uuid(login: str) -> str:
     return str(uuid3(NAMESPACE_DNS, f"OfflinePlayer:{login}"))
 
 
+BUILD_MANIFEST_NAME = "slauncher_build.json"
+
+
+def _read_json_file(path: str):
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except Exception:
+        return None
+
+
+def _build_manifest_path(minecraft_directory_version: str) -> str:
+    return os.path.join(minecraft_directory_version, BUILD_MANIFEST_NAME)
+
+
+def _scan_modded_version_id(versions_path: str, base_version: str | None = None, prefer: str | None = None):
+    """Найти установленный version_id модового ядра (forge/fabric/...).
+
+    Модовые версии содержат ключ ``inheritsFrom`` в своём JSON, ванильные — нет.
+    Это позволяет детерминированно отличить ядро от чистой версии Minecraft.
+    """
+    if not os.path.isdir(versions_path):
+        return None
+
+    candidates = []
+    for folder in os.listdir(versions_path):
+        folder_path = os.path.join(versions_path, folder)
+        if not os.path.isdir(folder_path):
+            continue
+        data = _read_json_file(os.path.join(folder_path, f"{folder}.json"))
+        if not data:
+            continue
+        inherits = data.get("inheritsFrom")
+        if inherits:
+            candidates.append((folder, inherits))
+
+    if not candidates:
+        return None
+
+    def score(item):
+        folder, inherits = item
+        low = folder.lower()
+        value = 0
+        if base_version and inherits == base_version:
+            value += 2
+        if prefer and prefer in low:
+            value += 4
+        if "forge" in low or "fabric" in low:
+            value += 1
+        return value
+
+    candidates.sort(key=score, reverse=True)
+    return candidates[0][0]
+
+
+def resolve_launch_version(version: str, minecraft_directory_version: str) -> str:
+    """Определить точный version_id для запуска.
+
+    Порядок:
+      1. Манифест сборки (slauncher_build.json) — самый надёжный источник.
+      2. Поиск модового ядра по ``inheritsFrom`` с учётом предпочитаемого загрузчика.
+      3. Любая найденная модовая версия.
+      4. Исходное имя (ванильные версии).
+    """
+    versions_path = os.path.join(minecraft_directory_version, "versions")
+
+    manifest = _read_json_file(_build_manifest_path(minecraft_directory_version))
+    if manifest:
+        version_id = manifest.get("version_id")
+        if version_id and os.path.isdir(os.path.join(versions_path, version_id)):
+            logger.info("Версия запуска определена из манифеста: %s", version_id)
+            return version_id
+
+    low = f" {version.lower()} "
+    base = version.split()[-1] if version.split() else None
+    prefer = None
+    if (
+        version.startswith("Forge")
+        or version.startswith("ПВП")
+        or version.startswith("LunarПВП")
+        or " forge " in low
+    ):
+        prefer = "forge"
+    elif version.startswith("Fabric") or " fabric " in low:
+        prefer = "fabric"
+
+    if prefer:
+        modded = _scan_modded_version_id(versions_path, base_version=base, prefer=prefer)
+        if modded:
+            logger.info("Версия запуска определена сканированием (%s): %s", prefer, modded)
+            return modded
+
+    modded = _scan_modded_version_id(versions_path, base_version=base)
+    if modded:
+        logger.info("Версия запуска определена сканированием ядра: %s", modded)
+        return modded
+
+    return version
+
+
 def _build_launch_options(login: str):
     account = get_account_for_launch(login) or {}
     account_type = account.get("account_type") or "offline"
@@ -169,30 +269,17 @@ def run_minecraft(login: str, version: str, server: str):
         _set_state(STATE_STARTING, progress=35)
         _update_ui_progress(35)
 
-        if version.startswith('Forge') or version.startswith('ПВП') or ' Forge ' in f' {version} ':
-            folders = [folder for folder in os.listdir(path) if os.path.isdir(os.path.join(path, folder))]
-            for folder in folders:
-                if folder.lower().startswith('forge'):
-                    version = folder
-                    break
-            else:
-                for folder in folders:
-                    if 'forge' in folder:
-                        version = folder
-                        
-        elif version.startswith('Fabric') or ' Fabric ' in f' {version} ':
-            folders = [folder for folder in os.listdir(path) if os.path.isdir(os.path.join(path, folder))]
-            for folder in folders:
-                if folder.lower().startswith("fabric-loader") and version.split()[-1] in folder:
-                    version = folder
-                    break
-            else:
-                for folder in folders:
-                    if folder.lower().startswith("fabric-loader"):
-                        version = folder
-                        break
-                        
-        if version.startswith('LunarПВП'):
+        # Детерминированное определение реального ядра для запуска.
+        # Сначала пробуем манифест сборки, затем — поиск по inheritsFrom.
+        # Это устраняет баг, когда вместо ядра запускался ванильный Minecraft.
+        is_lunar_pvp = version.startswith('LunarПВП')
+        if not is_lunar_pvp:
+            resolved_version = resolve_launch_version(version, minecraft_directory_version)
+            if resolved_version != version:
+                logger.info("Запуск сборки: %s -> ядро %s", version, resolved_version)
+            version = resolved_version
+
+        if is_lunar_pvp:
             java_path = find_java_8(prefer_javaw=True)
             if not java_path:
                 raise RuntimeError(

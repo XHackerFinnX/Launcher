@@ -344,11 +344,19 @@
                         <div class="page-actions">
                             <div class="search-wrapper">
                                 <i class="fas fa-search"></i>
-                                <input type="text" class="search-input" id="builds-search" placeholder="Поиск сборки…">
+                                <input
+                                    type="text"
+                                    class="search-input"
+                                    id="builds-search"
+                                    placeholder="Поиск сборки…"
+                                />
                             </div>
                         </div>
                         <div>
-                            <button class="btn-primary" id="open-modpack-creator">
+                            <button
+                                class="btn-primary"
+                                id="open-modpack-creator"
+                            >
                                 <div>
                                     <i class="fas fa-plus"></i> Создать сборку
                                     <!-- <span style="font-size: 11px; color: var(--on-accent)">(в разработке)</span> -->
@@ -712,7 +720,9 @@
                                 </span>
                             </div>
                             <div class="input-group">
-                                <label class="form-label" for="login">Никнейм</label>
+                                <label class="form-label" for="login"
+                                    >Никнейм</label
+                                >
                                 <input
                                     type="text"
                                     id="login"
@@ -721,7 +731,8 @@
                                     autocomplete="off"
                                 />
                                 <p class="input-helper">
-                                    3–16 символов: латиница, цифры и нижнее подчёркивание.
+                                    3–16 символов: латиница, цифры и нижнее
+                                    подчёркивание.
                                 </p>
                             </div>
                             <button class="add-account-btn">
@@ -734,14 +745,20 @@
                             <div class="accounts-panel-header">
                                 <div>
                                     <h3>Ely.by аккаунт</h3>
-                                    <p>Скины Ely.by, authlib-injector и локальный CustomSkinLoader для серверов.</p>
+                                    <p>
+                                        Скины Ely.by, authlib-injector и
+                                        локальный CustomSkinLoader для
+                                        се��веров.
+                                    </p>
                                 </div>
                                 <span class="account-type-chip ely">
                                     <i class="fas fa-shield-halved"></i> Ely.by
                                 </span>
                             </div>
                             <div class="input-group">
-                                <label class="form-label" for="ely-login">Логин или e-mail Ely.by</label>
+                                <label class="form-label" for="ely-login"
+                                    >Логин или e-mail Ely.by</label
+                                >
                                 <input
                                     type="text"
                                     id="ely-login"
@@ -751,7 +768,9 @@
                                 />
                             </div>
                             <div class="input-group">
-                                <label class="form-label" for="ely-password">Пароль</label>
+                                <label class="form-label" for="ely-password"
+                                    >Пароль</label
+                                >
                                 <input
                                     type="password"
                                     id="ely-password"
@@ -760,7 +779,9 @@
                                     autocomplete="current-password"
                                 />
                                 <p class="input-helper">
-                                    Лаунчер сохранит только access token, а для Forge/Fabric автоматически поставит skin-мод.
+                                    Лаунчер сохранит только access token, а для
+                                    Forge/Fabric автоматически поставит
+                                    skin-мод.
                                 </p>
                             </div>
                             <button class="add-ely-account-btn">
@@ -768,7 +789,9 @@
                                 Войти через Ely.by
                             </button>
                         </div>
-                        <div class="accounts-list accounts-panel accounts-roster">
+                        <div
+                            class="accounts-list accounts-panel accounts-roster"
+                        >
                             <div class="accounts-list-header">
                                 <span>Список аккаунтов</span>
                                 <span
@@ -1447,7 +1470,9 @@
                     <i class="fas fa-chevron-up combo-chevron"></i>
                 </button>
                 <div class="launcher-combo-menu account-combo-menu">
-                    <div class="combo-menu-title"><i class="far fa-star"></i> Аккаунты:</div>
+                    <div class="combo-menu-title">
+                        <i class="far fa-star"></i> Аккаунты:
+                    </div>
                     <div class="combo-options account-combo-options"></div>
                     <!-- <button class="combo-add-account" type="button" data-jump-section="accounts">
                         <i class="fas fa-user-plus"></i> + Добавить аккаунт
@@ -1459,12 +1484,16 @@
             </select>
             <div class="launcher-combo version-combo" data-combo="version">
                 <button class="launcher-combo-toggle" type="button">
-                    <span class="combo-version-icon"><i class="fas fa-cubes"></i></span>
+                    <span class="combo-version-icon"
+                        ><i class="fas fa-cubes"></i
+                    ></span>
                     <span class="combo-title">Выберите версию</span>
                     <i class="fas fa-chevron-up combo-chevron"></i>
                 </button>
                 <div class="launcher-combo-menu version-combo-menu">
-                    <div class="combo-menu-title"><i class="fas fa-download"></i> Версии:</div>
+                    <div class="combo-menu-title">
+                        <i class="fas fa-download"></i> Версии:
+                    </div>
                     <div class="combo-options version-combo-options"></div>
                 </div>
             </div>
@@ -1613,7 +1642,8 @@
                         <div class="modal-header-text">
                             <h3 id="modpack-modal-title">Создать сборку</h3>
                             <p id="modpack-modal-subtitle">
-                                Сначала создайте сборку, затем установите её и управляйте модами
+                                Сначала создайте сборку, затем установите её и
+                                управляйте модами
                             </p>
                         </div>
                     </div>
@@ -1626,6 +1656,24 @@
                     <!-- Режим: create / manage -->
                     <input type="hidden" id="modpack-mode" value="create" />
                     <input type="hidden" id="modpack-edit-id" value="" />
+
+                    <!-- Шаги создания (только в режиме create) -->
+                    <div class="modpack-steps" id="modpack-steps">
+                        <div class="modpack-step active" data-step="1">
+                            <span class="step-num">1</span>
+                            <span class="step-label">Основное</span>
+                        </div>
+                        <div class="step-divider"></div>
+                        <div class="modpack-step" data-step="2">
+                            <span class="step-num">2</span>
+                            <span class="step-label">Ядро</span>
+                        </div>
+                        <div class="step-divider"></div>
+                        <div class="modpack-step" data-step="3">
+                            <span class="step-num">3</span>
+                            <span class="step-label">Контент</span>
+                        </div>
+                    </div>
 
                     <!-- Поля названия и описания -->
                     <div class="modpack-meta">
@@ -1675,14 +1723,52 @@
                         </div>
                         <div class="modpack-field modpack-prepare">
                             <label>&nbsp;</label>
-                            <div class="modpack-lock-note" id="modpack-create-note">
+                            <div
+                                class="modpack-lock-note"
+                                id="modpack-create-note"
+                            >
                                 Ядро появится после выбора версии
                             </div>
                         </div>
                     </div>
 
-                    <div id="modpack-manage-tools" class="modpack-manage-tools"></div>
-                    <!-- Провайдеры модов -->
+                    <!-- Информационная панель в режиме управления -->
+                    <div id="modpack-manage-tools" class="modpack-manage-tools">
+                        <div class="modpack-info-banner">
+                            <i class="fas fa-circle-info"></i>
+                            <div class="modpack-info-text">
+                                <strong id="modpack-info-title">Сборка</strong>
+                                <span id="modpack-info-sub"
+                                    >Управление контентом</span
+                                >
+                            </div>
+                            <span
+                                class="modpack-loader-pill"
+                                id="modpack-loader-pill"
+                            ></span>
+                        </div>
+                    </div>
+
+                    <!-- Вкладки типа контента (только в режиме управления) -->
+                    <div class="content-type-tabs" id="content-type-tabs">
+                        <button
+                            class="content-type-tab active"
+                            data-content="mod"
+                        >
+                            <i class="fas fa-puzzle-piece"></i> Моды
+                        </button>
+                        <button
+                            class="content-type-tab"
+                            data-content="resourcepack"
+                        >
+                            <i class="fas fa-image"></i> Текстуры
+                        </button>
+                        <button class="content-type-tab" data-content="shader">
+                            <i class="fas fa-wand-magic-sparkles"></i> Шейдеры
+                        </button>
+                    </div>
+
+                    <!-- Провайдеры -->
                     <div class="mod-tabs">
                         <button
                             class="filter-tab active"
@@ -1692,50 +1778,56 @@
                         </button>
                     </div>
 
-                    <!-- Поиск и список модов -->
+                    <!-- Поиск и список контента -->
                     <div class="modpack-mods-layout">
-                    <div class="mod-section mod-catalog-section">
-                        <div class="mod-section-header">
-                            <h4>
-                                <i class="fas fa-magnifying-glass"></i>
-                                Доступные моды
-                            </h4>
-                            <span
-                                class="mod-section-badge"
-                                id="mods-count-badge"
-                                >0</span
-                            >
+                        <div class="mod-section mod-catalog-section">
+                            <div class="mod-section-header">
+                                <h4>
+                                    <i class="fas fa-magnifying-glass"></i>
+                                    <span id="catalog-title"
+                                        >Доступные моды</span
+                                    >
+                                </h4>
+                                <span
+                                    class="mod-section-badge"
+                                    id="mods-count-badge"
+                                    >0</span
+                                >
+                            </div>
+                            <div class="mod-search-wrap">
+                                <i class="fas fa-search"></i>
+                                <input
+                                    id="mod-search"
+                                    class="search-input"
+                                    placeholder="Поиск..."
+                                />
+                            </div>
+                            <div
+                                id="mods-results"
+                                class="mods-results-list"
+                            ></div>
                         </div>
-                        <div class="mod-search-wrap">
-                            <i class="fas fa-search"></i>
-                            <input
-                                id="mod-search"
-                                class="search-input"
-                                placeholder="Поиск мода..."
-                            />
-                        </div>
-                        <div id="mods-results" class="mods-results-list"></div>
-                    </div>
 
-                    <!-- Установленные моды -->
-                    <div class="mod-section installed-mods-section">
-                        <div class="mod-section-header">
-                            <h4>
-                                <i class="fas fa-check-circle"></i>
-                                Установленные моды
-                            </h4>
-                            <span
-                                class="mod-section-badge"
-                                id="installed-mods-count"
-                                >0</span
-                            >
+                        <!-- Установленный контент -->
+                        <div class="mod-section installed-mods-section">
+                            <div class="mod-section-header">
+                                <h4>
+                                    <i class="fas fa-check-circle"></i>
+                                    <span id="installed-title"
+                                        >Установленные моды</span
+                                    >
+                                </h4>
+                                <span
+                                    class="mod-section-badge"
+                                    id="installed-mods-count"
+                                    >0</span
+                                >
+                            </div>
+                            <div
+                                id="installed-mods-list"
+                                class="installed-mods-chips"
+                            ></div>
                         </div>
-                        <div
-                            id="installed-mods-list"
-                            class="installed-mods-chips"
-                        ></div>
-                    </div>
-                    </div>
                     </div>
 
                     <!-- Кнопка сохранения (видна только в режиме создания/управления) -->
