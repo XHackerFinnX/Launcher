@@ -1657,72 +1657,53 @@
                     <input type="hidden" id="modpack-mode" value="create" />
                     <input type="hidden" id="modpack-edit-id" value="" />
 
-                    <!-- Шаги создания (только в режиме create) -->
-                    <div class="modpack-steps" id="modpack-steps">
-                        <div class="modpack-step active" data-step="1">
-                            <span class="step-num">1</span>
-                            <span class="step-label">Основное</span>
+                    <!-- Форма создания (две колонки) -->
+                    <div class="modpack-create" id="modpack-create">
+                        <div class="modpack-create-col">
+                            <div class="modpack-field">
+                                <label for="modpack-name">Название сборки</label>
+                                <input
+                                    id="modpack-name"
+                                    class="search-input"
+                                    placeholder="Моя сборка"
+                                    maxlength="64"
+                                />
+                            </div>
+                            <div class="modpack-field modpack-field-grow">
+                                <label for="modpack-description"
+                                    >Описание</label
+                                >
+                                <textarea
+                                    id="modpack-description"
+                                    class="search-input modpack-textarea"
+                                    placeholder="Описание сборки (необязательно)"
+                                    maxlength="200"
+                                ></textarea>
+                            </div>
                         </div>
-                        <div class="step-divider"></div>
-                        <div class="modpack-step" data-step="2">
-                            <span class="step-num">2</span>
-                            <span class="step-label">Ядро</span>
-                        </div>
-                        <div class="step-divider"></div>
-                        <div class="modpack-step" data-step="3">
-                            <span class="step-num">3</span>
-                            <span class="step-label">Контент</span>
-                        </div>
-                    </div>
-
-                    <!-- Поля названия и описания -->
-                    <div class="modpack-meta">
-                        <div class="modpack-field">
-                            <label for="modpack-name">Название сборки</label>
-                            <input
-                                id="modpack-name"
-                                class="search-input"
-                                placeholder="Моя сборка"
-                                maxlength="64"
-                            />
-                        </div>
-                        <div class="modpack-field">
-                            <label for="modpack-description">Описание</label>
-                            <input
-                                id="modpack-description"
-                                class="search-input"
-                                placeholder="Описание сборки (необязательно)"
-                                maxlength="200"
-                            />
-                        </div>
-                    </div>
-
-                    <!-- Выбор версии и загрузчика -->
-                    <div class="modpack-top">
-                        <div class="modpack-field">
-                            <label for="modpack-version"
-                                >Версия Minecraft</label
-                            >
-                            <select
-                                id="modpack-version"
-                                class="modpack-loader-select"
-                            >
-                                <option value="">Выберите версию</option>
-                            </select>
-                        </div>
-                        <div class="modpack-field">
-                            <label for="modpack-loader">Загрузчик</label>
-                            <select
-                                id="modpack-loader"
-                                class="modpack-loader-select"
-                            >
-                                <option value="">
-                                    Сначала выберите версию
-                                </option>
-                            </select>
-                        </div>
-                        <div class="modpack-field modpack-prepare">
-                            <label>&nbsp;</label>
+                        <div class="modpack-create-col">
+                            <div class="modpack-field">
+                                <label for="modpack-version"
+                                    >Версия Minecraft</label
+                                >
+                                <select
+                                    id="modpack-version"
+                                    class="modpack-loader-select"
+                                >
+                                    <option value="">Выберите версию</option>
+                                </select>
+                            </div>
+                            <div class="modpack-field">
+                                <label for="modpack-loader">Загрузчик</label>
+                                <select
+                                    id="modpack-loader"
+                                    class="modpack-loader-select"
+                                >
+                                    <option value="">
+                                        Сначала выберите версию
+                                    </option>
+                                </select>
+                            </div>
                             <div
                                 class="modpack-lock-note"
                                 id="modpack-create-note"
@@ -1746,6 +1727,13 @@
                                 class="modpack-loader-pill"
                                 id="modpack-loader-pill"
                             ></span>
+                            <button
+                                id="modpack-delete-btn"
+                                class="modpack-delete-action"
+                                title="Удалить сборку"
+                            >
+                                <i class="fas fa-trash"></i> Удалить
+                            </button>
                         </div>
                     </div>
 
@@ -1768,16 +1756,6 @@
                         </button>
                     </div>
 
-                    <!-- Провайдеры -->
-                    <div class="mod-tabs">
-                        <button
-                            class="filter-tab active"
-                            data-provider="modrinth"
-                        >
-                            <i class="fas fa-cube"></i> Modrinth
-                        </button>
-                    </div>
-
                     <!-- Поиск и список контента -->
                     <div class="modpack-mods-layout">
                         <div class="mod-section mod-catalog-section">
@@ -1794,18 +1772,54 @@
                                     >0</span
                                 >
                             </div>
-                            <div class="mod-search-wrap">
-                                <i class="fas fa-search"></i>
-                                <input
-                                    id="mod-search"
-                                    class="search-input"
-                                    placeholder="Поиск..."
-                                />
+
+                            <!-- Панель фильтров -->
+                            <div class="mod-filter-bar">
+                                <div class="mod-search-wrap">
+                                    <i class="fas fa-search"></i>
+                                    <input
+                                        id="mod-search"
+                                        class="search-input"
+                                        placeholder="Поиск..."
+                                    />
+                                </div>
+                                <select
+                                    id="mod-sort"
+                                    class="modpack-loader-select mod-sort-select"
+                                >
+                                    <option value="relevance">
+                                        По релевантности
+                                    </option>
+                                    <option value="downloads">
+                                        По загрузкам
+                                    </option>
+                                    <option value="follows">
+                                        По подписчикам
+                                    </option>
+                                    <option value="newest">По новизне</option>
+                                    <option value="updated">
+                                        По обновлению
+                                    </option>
+                                </select>
+                                <button
+                                    id="mod-filter-toggle"
+                                    class="mod-filter-toggle"
+                                    title="Категории"
+                                >
+                                    <i class="fas fa-sliders"></i>
+                                    <span class="mod-filter-count" id="mod-filter-count"></span>
+                                </button>
                             </div>
+                            <div
+                                id="mod-categories"
+                                class="mod-categories hidden"
+                            ></div>
+
                             <div
                                 id="mods-results"
                                 class="mods-results-list"
                             ></div>
+                            <div id="mods-sentinel" class="mods-sentinel"></div>
                         </div>
 
                         <!-- Установленный контент -->
