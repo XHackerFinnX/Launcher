@@ -59,6 +59,122 @@ function toast({ title, message = "", type = "info", duration = 3500 }) {
     }, duration);
 }
 
+// ---------- Generic confirm dialog ----------
+function showConfirmDialog({
+    title,
+    message,
+    confirmText = "Подтвердить",
+    cancelText = "Отмена",
+    danger = false,
+}) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "confirm-overlay";
+        overlay.innerHTML = `
+            <div class="confirm-dialog">
+                <div class="confirm-icon ${danger ? "danger" : ""}">
+                    <i class="fas ${danger ? "fa-triangle-exclamation" : "fa-circle-question"}"></i>
+                </div>
+                <h3 class="confirm-title">${title}</h3>
+                <p class="confirm-message">${message}</p>
+                <div class="confirm-actions">
+                    <button class="confirm-cancel">${cancelText}</button>
+                    <button class="confirm-ok ${danger ? "danger" : ""}">${confirmText}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => overlay.classList.add("visible"));
+
+        const close = (result) => {
+            overlay.classList.remove("visible");
+            setTimeout(() => overlay.remove(), 200);
+            resolve(result);
+        };
+        overlay
+            .querySelector(".confirm-cancel")
+            .addEventListener("click", () => close(false));
+        overlay
+            .querySelector(".confirm-ok")
+            .addEventListener("click", () => close(true));
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) close(false);
+        });
+    });
+}
+
+// ---------- Mod dependency selection dialog ----------
+// Возвращает: null (отмена) | массив project_id для установки
+function showDependencyDialog({ modName, dependencies }) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "confirm-overlay dep-overlay";
+
+        const rows = dependencies
+            .map((dep) => {
+                const installed = dep.already_installed;
+                return `
+                <label class="dep-row ${installed ? "installed" : ""}">
+                    <input type="checkbox" class="dep-check" data-id="${escapeHtml(dep.project_id)}" ${installed ? "disabled" : "checked"} />
+                    <span class="dep-icon">${dep.icon ? `<img src="${escapeHtml(dep.icon)}" alt="">` : '<i class="fas fa-puzzle-piece"></i>'}</span>
+                    <span class="dep-info">
+                        <span class="dep-name">${escapeHtml(dep.title)}</span>
+                        <span class="dep-desc">${escapeHtml(dep.description || "")}</span>
+                    </span>
+                    ${installed ? '<span class="dep-status"><i class="fas fa-check"></i> Уже установлен</span>' : ""}
+                </label>`;
+            })
+            .join("");
+
+        overlay.innerHTML = `
+            <div class="confirm-dialog dep-dialog">
+                <div class="dep-header">
+                    <div class="confirm-icon">
+                        <i class="fas fa-diagram-project"></i>
+                    </div>
+                    <div>
+                        <h3 class="confirm-title">Нужны дополнительные моды</h3>
+                        <p class="confirm-message">Для работы «${escapeHtml(modName)}» рекомендуется установить зависимости. Снимите галочки с тех, что не нужны.</p>
+                    </div>
+                </div>
+                <div class="dep-list">${rows}</div>
+                <div class="confirm-actions dep-actions">
+                    <button class="confirm-cancel">Отменить</button>
+                    <button class="dep-install-selected">Установить выбранные</button>
+                    <button class="confirm-ok dep-install-all">Установить все</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => overlay.classList.add("visible"));
+
+        const close = (result) => {
+            overlay.classList.remove("visible");
+            setTimeout(() => overlay.remove(), 200);
+            resolve(result);
+        };
+        const allIds = dependencies
+            .filter((d) => !d.already_installed)
+            .map((d) => d.project_id);
+
+        overlay
+            .querySelector(".confirm-cancel")
+            .addEventListener("click", () => close([]));
+        overlay
+            .querySelector(".dep-install-all")
+            .addEventListener("click", () => close(allIds));
+        overlay
+            .querySelector(".dep-install-selected")
+            .addEventListener("click", () => {
+                const checked = [
+                    ...overlay.querySelectorAll(".dep-check:checked"),
+                ].map((c) => c.dataset.id);
+                close(checked);
+            });
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) close([]);
+        });
+    });
+}
+
 function setStartupLoaderText(text) {
     const textEl = document.getElementById("startup-loader-text");
     if (textEl) textEl.textContent = text;
@@ -1529,6 +1645,41 @@ function buildIcon(type) {
     return "fa-cube";
 }
 
+async function requestDeleteModpack(buildId, displayName) {
+    const confirmed = await showConfirmDialog({
+        title: "Удалить сборку?",
+        message: `Сборка «${displayName}» будет удалена вместе со всеми установленными модами и файлами. Действие необратимо.`,
+        confirmText: "Удалить",
+        cancelText: "Отмена",
+        danger: true,
+    });
+    if (!confirmed) return;
+    try {
+        const res = await eel.delete_custom_modpack(buildId)();
+        if (res?.ok) {
+            toast({
+                title: "Сборка удалена",
+                message: displayName,
+                type: "success",
+            });
+            const modal = document.getElementById("modpack-modal");
+            if (modal && !modal.classList.contains("hidden")) {
+                modal.classList.add("hidden");
+            }
+            await updateVersionGrid();
+            await updateVersionSelect();
+        } else {
+            toast({
+                title: "Не удалось удалить",
+                message: res?.error || "",
+                type: "error",
+            });
+        }
+    } catch (e) {
+        toast({ title: "Ошибка удаления", type: "error" });
+    }
+}
+
 function createVersionCard(version, options = {}) {
     const {
         isInstalled,
@@ -1549,7 +1700,12 @@ function createVersionCard(version, options = {}) {
     if (type) {
         const typeBadge = document.createElement("span");
         typeBadge.className = "version-type-badge";
-        typeBadge.textContent = type === "modpack" ? "Сборка" : type;
+        // Пользовательские сборки помечаем статусом «Сборка».
+        typeBadge.textContent = customBuild
+            ? "Сборка"
+            : type === "modpack"
+              ? "Сборка"
+              : type;
         cover.appendChild(typeBadge);
     }
 
@@ -1601,12 +1757,24 @@ function createVersionCard(version, options = {}) {
         settingsBtn.className = "settings-modpack-btn";
         settingsBtn.innerHTML = '<i class="fas fa-gear"></i>';
         settingsBtn.style.display = isInstalled ? "flex" : "none";
+        settingsBtn.title = "Настройки сборки";
         settingsBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             // Открыть модальное окно в режиме управления
             openModpackManageModal(version);
         });
         actions.appendChild(settingsBtn);
+
+        // Удаление пользовательской сборки прямо с карточки
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "delete-modpack-btn";
+        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteBtn.title = "Удалить сборку";
+        deleteBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            requestDeleteModpack(version, customBuild?.name || version);
+        });
+        actions.appendChild(deleteBtn);
     }
 
     body.appendChild(title);
@@ -2232,7 +2400,10 @@ async function renderUpdatesFeed() {
                         });
                     }
                 } catch (error) {
-                    console.warn("[SLauncher] Не удалось скачать обновление:", error);
+                    console.warn(
+                        "[SLauncher] Не удалось скачать обновление:",
+                        error,
+                    );
                     toast({
                         title: "Не удалось проверить обновление",
                         message: "Проверьте интернет-соединение.",
@@ -3028,20 +3199,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const saveRow = document.getElementById("modpack-save-row");
     const saveBtn = document.getElementById("modpack-save-btn");
 
-    const stepsEl = document.getElementById("modpack-steps");
-    const metaEl = modal?.querySelector(".modpack-meta");
-    const topEl = modal?.querySelector(".modpack-top");
+    const createEl = document.getElementById("modpack-create");
     const manageTools = document.getElementById("modpack-manage-tools");
     const createNote = document.getElementById("modpack-create-note");
     const versionSelect = document.getElementById("modpack-version");
     const loaderSelect = document.getElementById("modpack-loader");
     const nameInput = document.getElementById("modpack-name");
     const descInput = document.getElementById("modpack-description");
+    const deleteBtn = document.getElementById("modpack-delete-btn");
 
     const contentTabs = document.getElementById("content-type-tabs");
     const contentTabBtns =
         contentTabs?.querySelectorAll(".content-type-tab") || [];
-    const modTabsEl = modal?.querySelector(".mod-tabs");
     const modsLayoutEl = modal?.querySelector(".modpack-mods-layout");
     const catalogTitle = document.getElementById("catalog-title");
     const installedTitle = document.getElementById("installed-title");
@@ -3049,15 +3218,29 @@ document.addEventListener("DOMContentLoaded", () => {
     const infoSub = document.getElementById("modpack-info-sub");
     const loaderPill = document.getElementById("modpack-loader-pill");
 
-    const providerTabs = modal?.querySelectorAll(".mod-tabs .filter-tab") || [];
     const searchInput = document.getElementById("mod-search");
+    const sortSelect = document.getElementById("mod-sort");
+    const filterToggle = document.getElementById("mod-filter-toggle");
+    const filterCount = document.getElementById("mod-filter-count");
+    const categoriesEl = document.getElementById("mod-categories");
     const resultsEl = document.getElementById("mods-results");
+    const sentinel = document.getElementById("mods-sentinel");
     const installedList = document.getElementById("installed-mods-list");
 
-    let provider = "modrinth";
+    const provider = "modrinth";
     let currentManagedBuildId = "";
     let contentType = "mod";
-    let currentBuildMeta = null;
+
+    // Состояние бесконечной прокрутки/фильтров
+    const PAGE_SIZE = 20;
+    let offset = 0;
+    let total = 0;
+    let hasMore = false;
+    let loadingPage = false;
+    let installedNames = new Set();
+    let selectedCategories = new Set();
+    const categoriesCache = {};
+    let searchToken = 0;
 
     openBtn?.addEventListener("click", () => openModpackModal("create"));
     closeBtn?.addEventListener("click", closeModpackModal);
@@ -3066,37 +3249,19 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.target === modal) closeModpackModal();
     });
 
-    versionSelect?.addEventListener("change", () => {
-        onVersionChange();
-        updateSteps();
-    });
-    loaderSelect?.addEventListener("change", updateSteps);
-    nameInput?.addEventListener("input", updateSteps);
+    versionSelect?.addEventListener("change", onVersionChange);
     saveBtn?.addEventListener("click", saveCustomModpack);
-    searchInput?.addEventListener("input", debounce(loadAvailableContent, 350));
-
-    function updateSteps() {
-        if (!stepsEl || modeInput.value !== "create") return;
-        const steps = stepsEl.querySelectorAll(".modpack-step");
-        const hasName = nameInput.value.trim().length > 0;
-        const hasCore = !!versionSelect.value && !!loaderSelect.value;
-        steps.forEach((s) => {
-            const n = Number(s.dataset.step);
-            const done =
-                (n === 1 && hasName) ||
-                (n === 2 && hasCore) ||
-                (n === 3 && hasName && hasCore);
-            s.classList.toggle("active", done);
-        });
-    }
-
-    providerTabs.forEach((tab) => {
-        tab.addEventListener("click", () => {
-            providerTabs.forEach((t) => t.classList.remove("active"));
-            tab.classList.add("active");
-            provider = tab.dataset.provider || "modrinth";
-            loadAvailableContent();
-        });
+    searchInput?.addEventListener("input", debounce(resetAndLoad, 350));
+    sortSelect?.addEventListener("change", resetAndLoad);
+    filterToggle?.addEventListener("click", () => {
+        categoriesEl.classList.toggle("hidden");
+    });
+    deleteBtn?.addEventListener("click", () => {
+        if (!currentManagedBuildId) return;
+        requestDeleteModpack(
+            currentManagedBuildId,
+            nameInput.value || currentManagedBuildId,
+        );
     });
 
     contentTabBtns.forEach((tab) => {
@@ -3106,8 +3271,9 @@ document.addEventListener("DOMContentLoaded", () => {
             contentType = tab.dataset.content || "mod";
             applyContentLabels();
             searchInput.value = "";
-            loadAvailableContent();
-            loadInstalledContent();
+            selectedCategories.clear();
+            renderCategories();
+            loadInstalledContent().then(resetAndLoad);
         });
     });
 
@@ -3116,21 +3282,17 @@ document.addEventListener("DOMContentLoaded", () => {
         if (catalogTitle) catalogTitle.textContent = meta.catalog;
         if (installedTitle) installedTitle.textContent = meta.installed;
         if (searchInput) searchInput.placeholder = meta.searchPlaceholder;
-        // Шейдеры и текстуры доступны не только для Forge/Fabric — подсказка
         contentTabBtns.forEach((t) =>
             t.classList.toggle("active", t.dataset.content === contentType),
         );
     }
 
     function setCreateUiVisible(visible) {
-        if (stepsEl) stepsEl.style.display = visible ? "flex" : "none";
-        if (metaEl) metaEl.style.display = visible ? "grid" : "none";
-        if (topEl) topEl.style.display = visible ? "grid" : "none";
+        if (createEl) createEl.style.display = visible ? "grid" : "none";
     }
 
     function setManageUiVisible(visible) {
         if (contentTabs) contentTabs.style.display = visible ? "flex" : "none";
-        if (modTabsEl) modTabsEl.style.display = visible ? "flex" : "none";
         if (modsLayoutEl)
             modsLayoutEl.style.display = visible ? "grid" : "none";
         if (manageTools) manageTools.style.display = visible ? "block" : "none";
@@ -3141,9 +3303,8 @@ document.addEventListener("DOMContentLoaded", () => {
         modeInput.value = mode;
         editIdInput.value = modpackData?.id || modpackData?.build_id || "";
         currentManagedBuildId = editIdInput.value;
-        currentBuildMeta = modpackData;
-        provider = modpackData?.provider || "modrinth";
         contentType = "mod";
+        selectedCategories.clear();
         modal.classList.remove("hidden");
         resetModpackFormState();
         applyContentLabels();
@@ -3151,7 +3312,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (mode === "create") {
             modalTitle.textContent = "Создать сборку";
             modalSubtitle.textContent =
-                "Название → версия → Forge/Fabric → создайте сборку";
+                "Заполните данные слева и выберите ядро справа";
             saveBtn.innerHTML = '<i class="fas fa-plus"></i> Создать сборку';
             setCreateUiVisible(true);
             setManageUiVisible(false);
@@ -3166,7 +3327,7 @@ document.addEventListener("DOMContentLoaded", () => {
             modalSubtitle.textContent =
                 modpackData.name || modpackData.id || "Сборка";
             saveBtn.innerHTML =
-                '<i class="fas fa-save"></i> Сохранить';
+                '<i class="fas fa-save"></i> Сохранить описание';
             setCreateUiVisible(false);
             setManageUiVisible(true);
             saveRow.style.display = "flex";
@@ -3176,10 +3337,6 @@ document.addEventListener("DOMContentLoaded", () => {
             loaderSelect.innerHTML = `<option value="${escapeHtml(modpackData.loader)}">${escapeHtml(modpackData.loader === "fabric" ? "Fabric" : "Forge")}</option>`;
             versionSelect.value = modpackData.version || "";
             loaderSelect.value = modpackData.loader || "";
-            nameInput.disabled = true;
-            versionSelect.disabled = true;
-            loaderSelect.disabled = true;
-            descInput.disabled = false;
             if (infoTitle) infoTitle.textContent = modpackData.name || "Сборка";
             if (infoSub)
                 infoSub.textContent = `Minecraft ${modpackData.version || "?"}`;
@@ -3188,14 +3345,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 loaderPill.textContent = isFabric ? "Fabric" : "Forge";
                 loaderPill.className = `modpack-loader-pill ${isFabric ? "fabric" : "forge"}`;
             }
-            providerTabs.forEach((tab) =>
-                tab.classList.toggle(
-                    "active",
-                    tab.dataset.provider === provider,
-                ),
-            );
-            loadAvailableContent();
-            loadInstalledContent();
+            renderCategories();
+            loadInstalledContent().then(resetAndLoad);
         }
     };
 
@@ -3207,10 +3358,18 @@ document.addEventListener("DOMContentLoaded", () => {
         nameInput.value = "";
         descInput.value = "";
         searchInput.value = "";
+        if (sortSelect) sortSelect.value = "relevance";
         resultsEl.innerHTML = "";
         installedList.innerHTML = "";
+        categoriesEl.innerHTML = "";
+        categoriesEl.classList.add("hidden");
+        if (filterCount) filterCount.textContent = "";
         document.getElementById("mods-count-badge").textContent = "0";
         document.getElementById("installed-mods-count").textContent = "0";
+        offset = 0;
+        total = 0;
+        hasMore = false;
+        installedNames = new Set();
         if (createNote)
             createNote.textContent = "Ядро появится после выбора версии";
     }
@@ -3238,6 +3397,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function onVersionChange() {
+        if (modeInput.value !== "create") return;
         const version = versionSelect.value;
         loaderSelect.innerHTML = '<option value="">Проверяем ядра...</option>';
         loaderSelect.disabled = true;
@@ -3329,110 +3489,268 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     }
 
-    async function loadAvailableContent() {
+    // ---------- Категории-фильтры ----------
+    async function renderCategories() {
+        if (!categoriesEl) return;
+        let cats = categoriesCache[contentType];
+        if (!cats) {
+            categoriesEl.innerHTML =
+                '<span class="mod-cat-loading">Загрузка фильтров...</span>';
+            try {
+                const res = await eel.get_content_filters(contentType)();
+                cats = (res && res.categories) || [];
+            } catch (e) {
+                cats = [];
+            }
+            categoriesCache[contentType] = cats;
+        }
+        if (!cats.length) {
+            categoriesEl.innerHTML =
+                '<span class="mod-cat-loading">Фильтры недоступны</span>';
+            return;
+        }
+        categoriesEl.innerHTML = cats
+            .map(
+                (c) =>
+                    `<button class="mod-cat-chip ${selectedCategories.has(c.name) ? "active" : ""}" data-cat="${escapeHtml(c.name)}">${escapeHtml(c.name)}</button>`,
+            )
+            .join("");
+        categoriesEl.querySelectorAll(".mod-cat-chip").forEach((chip) =>
+            chip.addEventListener("click", () => {
+                const cat = chip.dataset.cat;
+                if (selectedCategories.has(cat)) selectedCategories.delete(cat);
+                else selectedCategories.add(cat);
+                chip.classList.toggle("active");
+                updateFilterCount();
+                resetAndLoad();
+            }),
+        );
+        updateFilterCount();
+    }
+
+    function updateFilterCount() {
+        if (!filterCount) return;
+        filterCount.textContent = selectedCategories.size
+            ? String(selectedCategories.size)
+            : "";
+    }
+
+    // ---------- Загрузка каталога с пагинацией ----------
+    function resetAndLoad() {
+        if (modeInput.value !== "manage" || !versionSelect.value) return;
+        offset = 0;
+        total = 0;
+        hasMore = false;
+        resultsEl.innerHTML =
+            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
+        loadPage(true);
+    }
+
+    async function loadPage(isFirst = false) {
+        if (loadingPage) return;
+        if (!isFirst && !hasMore) return;
         const version = versionSelect.value;
         const loader = loaderSelect.value;
         if (modeInput.value !== "manage" || !version) return;
-        resultsEl.innerHTML =
-            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
+
+        loadingPage = true;
+        const token = ++searchToken;
+        if (!isFirst) appendLoadingRow();
         try {
             const res = await eel.search_content(
                 contentType,
                 searchInput.value,
                 version,
                 loader,
-                24,
-                "downloads",
+                PAGE_SIZE,
+                sortSelect ? sortSelect.value : "relevance",
+                offset,
+                [...selectedCategories],
             )();
+            if (token !== searchToken) return; // устаревший ответ
+            removeLoadingRow();
             const items = (res && res.results) || [];
+            total = res?.total ?? items.length;
+            hasMore = !!res?.has_more;
+            offset += items.length;
             document.getElementById("mods-count-badge").textContent =
-                items.length;
-            if (!items.length) {
+                total.toLocaleString("ru-RU");
+
+            if (isFirst && !items.length) {
                 resultsEl.innerHTML =
                     '<div class="mod-empty"><i class="fas fa-search"></i><p>Ничего не найдено</p></div>';
                 return;
             }
-            resultsEl.innerHTML = items
+            if (isFirst) resultsEl.innerHTML = "";
+            appendItems(items, version, loader);
+        } catch (e) {
+            removeLoadingRow();
+            if (isFirst)
+                resultsEl.innerHTML =
+                    '<div class="mod-empty"><i class="fas fa-exclamation-triangle"></i><p>Ошибка загрузки каталога</p></div>';
+        } finally {
+            loadingPage = false;
+        }
+    }
+
+    function appendLoadingRow() {
+        const row = document.createElement("div");
+        row.className = "mods-loading-row";
+        row.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+        resultsEl.appendChild(row);
+    }
+    function removeLoadingRow() {
+        resultsEl.querySelector(".mods-loading-row")?.remove();
+    }
+
+    function appendItems(items, version, loader) {
+        const meta = CONTENT_META[contentType] || CONTENT_META.mod;
+        const frag = document.createDocumentFragment();
+        items.forEach((m) => {
+            const fileBase = (m.title || "").toLowerCase();
+            const alreadyByName = [...installedNames].some((n) =>
+                n.includes(fileBase),
+            );
+            const card = document.createElement("div");
+            card.className = "mod-card";
+            card.dataset.url = contentUrl(m);
+            const cats = (m.categories || [])
+                .filter((c) => c !== loader)
+                .slice(0, 3)
                 .map(
-                    (m) => `
-                <div class="mod-result-card" data-url="${escapeHtml(contentUrl(m))}">
-                    <div class="mod-result-icon">${m.icon ? `<img src="${escapeHtml(m.icon)}" alt="">` : `<i class="fas ${CONTENT_META[contentType].icon}"></i>`}</div>
-                    <div class="mod-result-info">
-                        <div class="mod-result-name">${escapeHtml(m.title || "Без названия")}</div>
-                        <div class="mod-result-author">${escapeHtml(m.author || "")}</div>
-                        <div class="mod-result-meta">
-                            <span class="mod-result-version">${escapeHtml(version)}${contentType === "mod" && loader ? " / " + escapeHtml(loader) : ""}</span>
-                            <span class="mod-result-downloads"><i class="fas fa-download"></i> ${Number(m.downloads || 0).toLocaleString("ru-RU")}</span>
-                        </div>
-                    </div>
-                    <div class="mod-result-action">
-                        <button class="mod-link-btn" data-url="${escapeHtml(contentUrl(m))}" title="Открыть на Modrinth"><i class="fas fa-arrow-up-right-from-square"></i></button>
-                        <button class="mod-install-btn" data-id="${escapeHtml(m.project_id)}">Установить</button>
-                    </div>
-                </div>`,
+                    (c) => `<span class="mod-card-tag">${escapeHtml(c)}</span>`,
                 )
                 .join("");
+            card.innerHTML = `
+                <div class="mod-card-top">
+                    <div class="mod-card-icon">${m.icon ? `<img src="${escapeHtml(m.icon)}" alt="" loading="lazy">` : `<i class="fas ${meta.icon}"></i>`}</div>
+                    <div class="mod-card-headings">
+                        <div class="mod-card-name">${escapeHtml(m.title || "Без названия")}</div>
+                        <div class="mod-card-author">${escapeHtml(m.author || "")}</div>
+                    </div>
+                </div>
+                <div class="mod-card-desc">${escapeHtml(m.description || "")}</div>
+                <div class="mod-card-tags">${cats}</div>
+                <div class="mod-card-footer">
+                    <span class="mod-card-downloads"><i class="fas fa-download"></i> ${Number(m.downloads || 0).toLocaleString("ru-RU")}</span>
+                    <div style="display: flex;">
+                        <button class="mod-link-btn" title="Открыть на Modrinth"><i class="fas fa-arrow-up-right-from-square"></i></button>
+                        <div class="mod-card-actions">
+                            <button class="mod-install-btn ${alreadyByName ? "installed" : ""}" data-id="${escapeHtml(m.project_id)}" data-name="${escapeHtml(m.title || "")}">${alreadyByName ? "Установлено" : "Установить"}</button>
+                        </div>
+                    </div>
+                </div>`;
 
-            resultsEl.querySelectorAll(".mod-result-card").forEach((card) => {
-                card.addEventListener("click", () =>
-                    openExternalUrl(card.dataset.url),
-                );
-            });
-            resultsEl.querySelectorAll(".mod-link-btn").forEach((btn) => {
-                btn.addEventListener("click", (e) => {
+            card.querySelector(".mod-link-btn").addEventListener(
+                "click",
+                (e) => {
                     e.stopPropagation();
-                    openExternalUrl(btn.dataset.url);
-                });
-            });
-            resultsEl.querySelectorAll(".mod-install-btn").forEach((btn) =>
-                btn.addEventListener("click", async function (e) {
-                    e.stopPropagation();
-                    const projectId = this.dataset.id;
-                    const original = this.textContent;
-                    this.textContent = "Установка...";
-                    this.disabled = true;
-                    try {
-                        const r = await eel.install_content(
-                            contentType,
-                            provider,
-                            projectId,
-                            currentManagedBuildId,
-                            version,
-                            loader,
-                        )();
-                        if (r.ok) {
-                            this.textContent = "Установлено";
-                            this.classList.add("installed");
-                            await loadInstalledContent();
-                            if (r.exact === false) {
-                                toast({
-                                    title: "Установлено",
-                                    message:
-                                        "Точная версия не найдена, установлена ближайшая совместимая",
-                                    type: "info",
-                                });
-                            }
-                        } else {
-                            this.textContent = "Ошибка";
-                            this.disabled = false;
-                            toast({
-                                title: "Не удалось установить",
-                                message: r.error || "",
-                                type: "error",
-                            });
-                            setTimeout(() => {
-                                this.textContent = original;
-                            }, 1500);
-                        }
-                    } catch (e) {
-                        this.textContent = "Ошибка";
-                        this.disabled = false;
-                    }
-                }),
+                    openExternalUrl(card.dataset.url);
+                },
             );
+            const installBtn = card.querySelector(".mod-install-btn");
+            if (!alreadyByName) {
+                installBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    handleInstall(installBtn, m, version, loader);
+                });
+            } else {
+                installBtn.disabled = true;
+            }
+            frag.appendChild(card);
+        });
+        resultsEl.appendChild(frag);
+    }
+
+    // ---------- Установка с разрешением зависимостей ----------
+    async function installSingle(projectId, version, loader) {
+        const r = await eel.install_content(
+            contentType,
+            provider,
+            projectId,
+            currentManagedBuildId,
+            version,
+            loader,
+        )();
+        return r;
+    }
+
+    async function handleInstall(btn, mod, version, loader) {
+        const original = btn.textContent;
+        btn.textContent = "Проверка...";
+        btn.disabled = true;
+        try {
+            // Только для модов проверяем зависимости.
+            let deps = [];
+            if (contentType === "mod") {
+                try {
+                    const depRes = await eel.resolve_content_dependencies(
+                        contentType,
+                        mod.project_id,
+                        currentManagedBuildId,
+                        version,
+                        loader,
+                    )();
+                    deps = (depRes && depRes.dependencies) || [];
+                } catch (e) {
+                    deps = [];
+                }
+            }
+
+            const needed = deps.filter((d) => !d.already_installed);
+            let toInstall = [];
+            if (needed.length) {
+                const choice = await showDependencyDialog({
+                    modName: mod.title || "Мод",
+                    dependencies: deps,
+                });
+                // choice === [] -> только сам мод (Отменить); иначе выбранные id
+                toInstall = choice || [];
+            }
+
+            btn.textContent = "Установка...";
+            // Сначала зависимости, затем сам мод
+            for (const pid of toInstall) {
+                try {
+                    await installSingle(pid, version, loader);
+                } catch (e) {}
+            }
+            const r = await installSingle(mod.project_id, version, loader);
+            if (r.ok) {
+                btn.textContent = r.already_installed
+                    ? "Уже есть"
+                    : "Установлено";
+                btn.classList.add("installed");
+                await loadInstalledContent();
+                if (toInstall.length) {
+                    toast({
+                        title: "Готово",
+                        message: `Установлено зависимостей: ${toInstall.length}`,
+                        type: "success",
+                    });
+                } else if (r.exact === false) {
+                    toast({
+                        title: "Установлено",
+                        message:
+                            "Точная версия не найдена, установлена ближайшая совместимая",
+                        type: "info",
+                    });
+                }
+            } else {
+                btn.textContent = "Ошибка";
+                btn.disabled = false;
+                toast({
+                    title: "Не удалось установить",
+                    message: r.error || "",
+                    type: "error",
+                });
+                setTimeout(() => {
+                    btn.textContent = original;
+                }, 1500);
+            }
         } catch (e) {
-            resultsEl.innerHTML =
-                '<div class="mod-empty"><i class="fas fa-exclamation-triangle"></i><p>Ошибка загрузки каталога</p></div>';
+            btn.textContent = "Ошибка";
+            btn.disabled = false;
         }
     }
 
@@ -3444,6 +3762,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const list =
                 (await eel.list_installed_content(contentType, buildId)()) ||
                 [];
+            installedNames = new Set(
+                list.map((m) => String(m.name || "").toLowerCase()),
+            );
             document.getElementById("installed-mods-count").textContent =
                 list.length;
             if (!list.length) {
@@ -3484,7 +3805,6 @@ document.addEventListener("DOMContentLoaded", () => {
                             itemName,
                         )();
                         await loadInstalledContent();
-                        await loadAvailableContent();
                         toast({
                             title: "Удалено",
                             message: itemName,
@@ -3499,6 +3819,19 @@ document.addEventListener("DOMContentLoaded", () => {
             installedList.innerHTML =
                 '<div class="mod-empty"><p>Ошибка загрузки списка</p></div>';
         }
+    }
+
+    // Бесконечная прокрутка через IntersectionObserver
+    if (sentinel && "IntersectionObserver" in window) {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasMore && !loadingPage) {
+                    loadPage(false);
+                }
+            },
+            { root: resultsEl, rootMargin: "120px" },
+        );
+        observer.observe(sentinel);
     }
 
     function debounce(fn, delay) {

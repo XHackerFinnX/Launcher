@@ -396,7 +396,7 @@ def get_my_public_ip():
                     "ok": True,
                     "ip": cached_ip,
                     "cached": True,
-                    "warning": "Не удалось обновить публичный IP, использован сохранённый."
+                    "warning": "Не удалось об��овить публичный IP, использован сохранённый."
                 }
 
             return {
@@ -2238,6 +2238,34 @@ def get_custom_modpack(build_id):
 
 
 @eel.expose
+def delete_custom_modpack(build_id):
+    """Полностью удаляет кастомную сборку: запись в БД, установленную версию и файлы."""
+    build_id = str(build_id or "").strip()
+    if not build_id:
+        return {"ok": False, "error": "Не указан идентификатор сборки"}
+
+    # Удаляем папку установленной версии (если установлена) и запись из списка версий.
+    try:
+        delete_versions_list(build_id)
+    except Exception:
+        logger.debug("Не удалось удалить файлы сборки %s", build_id, exc_info=True)
+
+    conn = create_connection(db_path)
+    cursor = conn.cursor()
+    _ensure_custom_modpacks_table(cursor)
+    try:
+        cursor.execute("DELETE FROM custom_modpacks WHERE build_id = ?", (build_id,))
+        conn.commit()
+        return {"ok": True}
+    except Exception as exc:
+        conn.rollback()
+        logger.exception("Не удалось удалить кастомную сборку %s", build_id)
+        return {"ok": False, "error": str(exc)}
+    finally:
+        conn.close()
+
+
+@eel.expose
 def delete_installed_mod(version_name, mod_name):
     mods_path = _mods_dir(version_name)
     target = mods_path / Path(str(mod_name or "")).name
@@ -2289,15 +2317,30 @@ def list_installed_content(content_type, version_name):
     return out
 
 
+_ALLOWED_SEARCH_INDEXES = {"relevance", "downloads", "follows", "newest", "updated"}
+
+
 @eel.expose
-def search_content(content_type, query, game_version, loader, limit=24, index='relevance'):
-    """Поиск контента на Modrinth с фильтром по типу проекта."""
+def search_content(content_type, query, game_version, loader, limit=24, index='relevance', offset=0, categories=None):
+    """Поиск контента на Modrinth с фильтром по типу проекта, пагинацией и категориями."""
     content_type = str(content_type or "mod").lower()
     project_type = _PROJECT_TYPE_FACET.get(content_type, "mod")
     query = query or ''
     game_version = str(game_version or '').strip()
     loader = str(loader or '').strip()
     limit = max(1, min(int(limit or 24), 50))
+    try:
+        offset = max(0, int(offset or 0))
+    except (TypeError, ValueError):
+        offset = 0
+    index = str(index or 'relevance').strip().lower()
+    if index not in _ALLOWED_SEARCH_INDEXES:
+        index = 'relevance'
+
+    # Категории фильтра приходят списком или строкой через запятую.
+    if isinstance(categories, str):
+        categories = [c.strip() for c in categories.split(',') if c.strip()]
+    categories = [str(c).strip() for c in (categories or []) if str(c).strip()]
 
     facets = [f'["project_type:{project_type}"]']
     if game_version:
@@ -2305,17 +2348,24 @@ def search_content(content_type, query, game_version, loader, limit=24, index='r
     # Загрузчик важен только для модов; ресурспаки/шейдеры от него не зависят.
     if loader and content_type == "mod":
         facets.append(f'["categories:{loader}"]')
+    for category in categories:
+        # Защита от инъекций в facets — пропускаем только безопасные символы.
+        safe = ''.join(ch for ch in category if ch.isalnum() or ch in {'-', '_'})
+        if safe:
+            facets.append(f'["categories:{safe}"]')
     facets_str = '[' + ','.join(facets) + ']'
 
     url = "https://api.modrinth.com/v2/search"
-    params = {"query": query, "limit": limit, "index": index, "facets": facets_str}
+    params = {"query": query, "limit": limit, "offset": offset, "index": index, "facets": facets_str}
     try:
         r = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
     except Exception as exc:
         logger.exception("Ошибка поиска контента Modrinth")
-        return {"ok": False, "error": str(exc), "results": []}
-    hits = r.json().get('hits', [])
+        return {"ok": False, "error": str(exc), "results": [], "total": 0, "offset": offset}
+    payload = r.json()
+    hits = payload.get('hits', [])
+    total = payload.get('total_hits', 0)
     url_kind = {"mod": "mod", "resourcepack": "resourcepack", "shader": "shader"}.get(content_type, "mod")
     results = [
         {
@@ -2326,13 +2376,18 @@ def search_content(content_type, query, game_version, loader, limit=24, index='r
             "description": h.get('description'),
             "icon": h.get('icon_url'),
             "downloads": h.get('downloads', 0),
+            "follows": h.get('follows', 0),
             "author": h.get('author'),
             "categories": h.get('categories', []),
+            "client_side": h.get('client_side'),
+            "server_side": h.get('server_side'),
+            "date_modified": h.get('date_modified'),
             "url": f"https://modrinth.com/{url_kind}/{h.get('slug') or h.get('project_id')}",
         }
         for h in hits
     ]
-    return {"ok": True, "results": results}
+    has_more = (offset + len(results)) < total
+    return {"ok": True, "results": results, "total": total, "offset": offset, "has_more": has_more}
 
 
 @eel.expose
@@ -2385,6 +2440,16 @@ def install_content(content_type, provider, project_id, version_name, game_versi
     if not filename:
         return {"ok": False, "error": "Некорректное имя файла"}
     target = target_dir / filename
+    # Проверяем, не установлен ли уже этот файл, чтобы не было дублей.
+    if target.exists():
+        return {
+            "ok": True,
+            "name": filename,
+            "size": target.stat().st_size,
+            "exact": selected is not None,
+            "already_installed": True,
+            "installed_at": datetime.utcnow().isoformat(),
+        }
     try:
         _download_file_to_target(file_obj.get('url'), target)
     except Exception as exc:
@@ -2395,8 +2460,127 @@ def install_content(content_type, provider, project_id, version_name, game_versi
         "name": filename,
         "size": target.stat().st_size,
         "exact": selected is not None,
+        "already_installed": False,
         "installed_at": datetime.utcnow().isoformat(),
     }
+
+
+@eel.expose
+def get_content_filters(content_type):
+    """Возвращает доступные категории/фильтры Modrinth для типа контента."""
+    content_type = str(content_type or "mod").lower()
+    project_type = _PROJECT_TYPE_FACET.get(content_type, "mod")
+    try:
+        r = requests.get("https://api.modrinth.com/v2/tag/category", timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+    except Exception as exc:
+        logger.exception("Не удалось получить категории Modrinth")
+        return {"ok": False, "error": str(exc), "categories": []}
+    loader_names = {"forge", "fabric", "quilt", "neoforge", "liteloader", "modloader", "rift", "bukkit", "spigot", "paper", "purpur", "sponge", "bungeecord", "velocity", "folia", "datapack", "minecraft"}
+    categories = []
+    for tag in r.json():
+        if tag.get("project_type") != project_type:
+            continue
+        name = tag.get("name")
+        if not name or name in loader_names:
+            continue
+        categories.append({"name": name, "header": tag.get("header", "")})
+    return {"ok": True, "categories": categories}
+
+
+def _resolve_modrinth_version(project_id, game_version, loader, content_type="mod"):
+    """Подбирает подходящую версию проекта Modrinth и возвращает (version_dict|None)."""
+    url = f"https://api.modrinth.com/v2/project/{project_id}/version"
+    r = requests.get(url, timeout=REQUEST_TIMEOUT)
+    r.raise_for_status()
+    versions = r.json()
+    selected = None
+    fallback = None
+    for ver in versions:
+        if game_version and game_version not in ver.get('game_versions', []):
+            continue
+        if content_type == "mod" and loader and loader not in ver.get('loaders', []):
+            continue
+        selected = ver
+        break
+    if not selected:
+        for ver in versions:
+            if content_type == "mod" and loader and loader not in ver.get('loaders', []):
+                continue
+            fallback = ver
+            break
+    return selected or fallback
+
+
+@eel.expose
+def resolve_content_dependencies(content_type, project_id, version_name, game_version, loader):
+    """Определяет обязательные зависимости мода и помечает уже установленные."""
+    content_type = str(content_type or "mod").lower()
+    resolver, exts = _CONTENT_DIRS.get(content_type, (_mods_dir, (".jar",)))
+    target_dir = resolver(version_name)
+    installed_files = set()
+    if target_dir.exists():
+        installed_files = {
+            f.name.lower()
+            for f in target_dir.iterdir()
+            if f.is_file() and f.suffix.lower() in exts
+        }
+
+    try:
+        chosen = _resolve_modrinth_version(project_id, game_version, loader, content_type)
+    except Exception as exc:
+        logger.exception("Ошибка получения версий проекта %s", project_id)
+        return {"ok": False, "error": str(exc), "dependencies": []}
+    if not chosen:
+        return {"ok": True, "dependencies": []}
+
+    dep_project_ids = []
+    for dep in chosen.get('dependencies', []):
+        if dep.get('dependency_type') != 'required':
+            continue
+        pid = dep.get('project_id')
+        if pid:
+            dep_project_ids.append(pid)
+
+    dependencies = []
+    seen = set()
+    for pid in dep_project_ids:
+        if pid in seen:
+            continue
+        seen.add(pid)
+        try:
+            proj = requests.get(f"https://api.modrinth.com/v2/project/{pid}", timeout=REQUEST_TIMEOUT)
+            proj.raise_for_status()
+            proj_data = proj.json()
+        except Exception:
+            logger.debug("Не удалось получить данные зависимости %s", pid, exc_info=True)
+            continue
+
+        already = False
+        try:
+            dep_ver = _resolve_modrinth_version(pid, game_version, loader, content_type)
+            if dep_ver:
+                files = dep_ver.get('files', [])
+                file_obj = next((f for f in files if f.get('primary')), None) or (files[0] if files else None)
+                if file_obj:
+                    fname = Path(str(file_obj.get('filename') or "")).name.lower()
+                    if fname and fname in installed_files:
+                        already = True
+        except Exception:
+            logger.debug("Не удалось проверить установку зависимости %s", pid, exc_info=True)
+
+        dependencies.append({
+            "project_id": pid,
+            "slug": proj_data.get('slug'),
+            "title": proj_data.get('title') or pid,
+            "description": proj_data.get('description') or "",
+            "icon": proj_data.get('icon_url'),
+            "downloads": proj_data.get('downloads', 0),
+            "already_installed": already,
+            "url": f"https://modrinth.com/mod/{proj_data.get('slug') or pid}",
+        })
+
+    return {"ok": True, "dependencies": dependencies}
 
 
 @eel.expose
