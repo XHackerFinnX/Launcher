@@ -396,7 +396,7 @@ def get_my_public_ip():
                     "ok": True,
                     "ip": cached_ip,
                     "cached": True,
-                    "warning": "Не удалось об��овить публичный IP, использован сохранённый."
+                    "warning": "Не удалось о����овить публичный IP, использован сохранённый."
                 }
 
             return {
@@ -619,7 +619,7 @@ def get_tunnel_agent_status(room_id=""):
         return {"ok": True, "room_id": room, "running": False, "status": "idle"}
     return {"ok": True, "room_id": room, "running": True, **agent.status()}
 
-def _download_file_to_target(url: str, target_path: Path) -> None:
+def _download_file_to_target(url: str, target_path: Path, progress_cb=None) -> None:
     url = str(url or "").strip()
 
     if not url.startswith("https://"):
@@ -642,12 +642,35 @@ def _download_file_to_target(url: str, target_path: Path) -> None:
         ) as response:
             response.raise_for_status()
 
+            # Реальный прогресс по размеру файла (Content-Length).
+            total = 0
+            try:
+                total = int(response.headers.get("Content-Length") or 0)
+            except (TypeError, ValueError):
+                total = 0
+            downloaded = 0
+
             with tmp_path.open("wb") as file:
                 for chunk in response.iter_content(chunk_size=1024 * 128):
                     if chunk:
                         file.write(chunk)
+                        downloaded += len(chunk)
+                        if progress_cb:
+                            try:
+                                if total > 0:
+                                    progress_cb(min(99.0, downloaded / total * 100.0))
+                                else:
+                                    # Размер неизвестен — отправляем неопределённый прогресс.
+                                    progress_cb(-1)
+                            except Exception:
+                                pass
 
         tmp_path.replace(target_path)
+        if progress_cb:
+            try:
+                progress_cb(100.0)
+            except Exception:
+                pass
 
     except Exception:
         try:
@@ -1478,7 +1501,7 @@ def check_launcher_files_integrity():
                 logger.exception("Не удалось скачать файл %s", file_name)
                 state = "error"
             except OSError:
-                logger.exception("Не удалось сохранить файл %s", file_name)
+                logger.exception("Не удалось со��ранить файл %s", file_name)
                 state = "error"
 
         summary["checked"] = index
@@ -1737,7 +1760,7 @@ def check_version_launcher():
         return False
 
     except Exception:
-        logger.exception("Ошибка check_version_launcher")
+        logger.exception("Оши��ка check_version_launcher")
         return False
     
 def start_check_version_launcher():
@@ -2451,7 +2474,12 @@ def install_content(content_type, provider, project_id, version_name, game_versi
             "installed_at": datetime.utcnow().isoformat(),
         }
     try:
-        _download_file_to_target(file_obj.get('url'), target)
+        def _cb(percent):
+            try:
+                eel.updateContentInstallProgress(percent, filename)
+            except Exception:
+                pass
+        _download_file_to_target(file_obj.get('url'), target, progress_cb=_cb)
     except Exception as exc:
         logger.exception("Ошибка загрузки контента %s", filename)
         return {"ok": False, "error": str(exc)}

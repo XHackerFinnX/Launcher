@@ -1182,16 +1182,14 @@ async function updateVersionSelect() {
     uniqueVersions.forEach((versionValue) => {
         const option = new Option(`${versionValue}`, versionValue);
         versionSelect.add(option);
-        if (versionValue == versiondata) {
-            const ss = document.querySelector(".server-select");
-            versionSelect.value = versiondata;
-            if (versiondata === "LunarПВП 1.8.9") {
-                ss.style.display = "block";
-            } else {
-                ss.style.display = "none";
-            }
-        }
     });
+
+    // Восстанавливаем сохранённый выбор версии из БД.
+    if (versiondata && uniqueVersions.includes(versiondata)) {
+        versionSelect.value = versiondata;
+    }
+    // Видимость селекта сервера зависит только от выбранной версии.
+    toggleServerSelect();
 
     playBtn.disabled = !versionSelect.value || isDownloading;
     renderVersionCombo();
@@ -1212,16 +1210,50 @@ const circularProgress = document.querySelector(".circular-progress");
 const progressCircle = document.querySelector(".circular-progress .progress");
 const progressText = document.querySelector(".progress-text");
 
+// Доп. подписчик на прогресс установки ядра (используется импортом сборки),
+// чтобы показывать тот же реальный прогресс на полоске загрузки сборки.
+window.__coreDownloadProgress = null;
+
 function updateProgressDownload(percent) {
     const validPercent = Math.max(0, Math.min(percent, 100));
     // r=27 → 2π*27 ≈ 169.646
     const dashoffset = 169.646 - (169.646 * validPercent) / 100;
     progressCircle.style.strokeDashoffset = dashoffset;
     progressText.textContent = `${Math.round(validPercent)}%`;
+    if (typeof window.__coreDownloadProgress === "function") {
+        window.__coreDownloadProgress(validPercent);
+    }
 }
 
 try {
     eel.expose(updateProgressDownload);
+} catch (e) {}
+
+// ---------- Progress callbacks for content/share/import (exposed to Python) ----------
+// Каждый колбэк просто перенаправляет прогресс в активный обработчик, если он есть.
+window.__contentInstallProgress = null;
+window.__shareProgress = null;
+window.__importProgress = null;
+
+function updateContentInstallProgress(percent, label) {
+    if (typeof window.__contentInstallProgress === "function") {
+        window.__contentInstallProgress(percent, label);
+    }
+}
+function updateShareProgress(percent, stage, log) {
+    if (typeof window.__shareProgress === "function") {
+        window.__shareProgress(percent, stage, log);
+    }
+}
+function updateImportProgress(percent, stage, log) {
+    if (typeof window.__importProgress === "function") {
+        window.__importProgress(percent, stage, log);
+    }
+}
+try {
+    eel.expose(updateContentInstallProgress);
+    eel.expose(updateShareProgress);
+    eel.expose(updateImportProgress);
 } catch (e) {}
 
 // ---------- Play button ----------
@@ -1413,6 +1445,16 @@ async function getIpAddress() {
     }
 }
 
+// Единственный источник правды для видимости селекта сервера.
+// Сервер показываем ТОЛЬКО когда выбрана версия LunarПВП 1.8.9.
+function toggleServerSelect() {
+    const vs = document.querySelector(".version-select");
+    const ss = document.querySelector(".server-select");
+    if (!vs || !ss) return;
+    const selected = vs.value || "";
+    ss.style.display = selected === "LunarПВП 1.8.9" ? "block" : "none";
+}
+
 async function updateServerSelect() {
     const ss = document.querySelector(".server-select");
     while (ss.options.length > 1) ss.remove(1);
@@ -1425,12 +1467,9 @@ async function updateServerSelect() {
         new Set((serverIps || []).map((ip) => normalizeServerIp(ip))),
     ).filter(Boolean);
 
-    if (uniqueIps.length === 0) {
-        ss.style.display = "none";
-    } else {
-        ss.style.display = "";
-        uniqueIps.forEach((ip) => ss.add(new Option(ip, ip)));
-    }
+    // Только наполняем список адресов — видимость зависит исключительно от версии.
+    uniqueIps.forEach((ip) => ss.add(new Option(ip, ip)));
+    toggleServerSelect();
 }
 
 // ---------- Accounts ----------
@@ -1556,7 +1595,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!inserted) {
                 toast({
                     title: "Не удалось добавить",
-                    message: "Возможно, такой ник уже есть",
+                    message: "Во��можно, такой ник уже есть",
                     type: "error",
                 });
                 return;
@@ -1982,7 +2021,8 @@ async function updateVersionGrid() {
     // ----- Builds grid -----
     versions_build.forEach((version) => {
         const customBuild = customModpacksById.get(version);
-        const type = customBuild?.loader || classifyBuild(version);
+        // Пользовательские сборки всегда попадают в раздел «Модпаки».
+        const type = customBuild ? "modpack" : classifyBuild(version);
         const card = createVersionCard(version, {
             isInstalled: installedVersionsSet.has(version),
             type,
@@ -3186,6 +3226,14 @@ const CONTENT_META = {
         icon: "fa-wand-magic-sparkles",
         urlKind: "shader",
     },
+    world: {
+        catalog: "Миры",
+        installed: "Миры",
+        searchPlaceholder: "",
+        emptyInstalled: "В этой сборке пока нет миров",
+        icon: "fa-earth-americas",
+        urlKind: "mod",
+    },
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -3206,7 +3254,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const loaderSelect = document.getElementById("modpack-loader");
     const nameInput = document.getElementById("modpack-name");
     const descInput = document.getElementById("modpack-description");
+    const manageDescInput = document.getElementById(
+        "modpack-manage-description",
+    );
+    const manageDescSave = document.getElementById("modpack-desc-save");
+    const shareBtn = document.getElementById("modpack-share-btn");
     const deleteBtn = document.getElementById("modpack-delete-btn");
+    const worldsPanel = document.getElementById("modpack-worlds-panel");
 
     const contentTabs = document.getElementById("content-type-tabs");
     const contentTabBtns =
@@ -3224,16 +3278,31 @@ document.addEventListener("DOMContentLoaded", () => {
     const filterCount = document.getElementById("mod-filter-count");
     const categoriesEl = document.getElementById("mod-categories");
     const resultsEl = document.getElementById("mods-results");
-    const sentinel = document.getElementById("mods-sentinel");
+    const paginationEl = document.getElementById("mods-pagination");
+    const prevBtn = document.getElementById("mods-prev");
+    const nextBtn = document.getElementById("mods-next");
+    const pageIndicator = document.getElementById("mods-page-indicator");
     const installedList = document.getElementById("installed-mods-list");
+
+    // Прогресс установки контента + панель миров
+    const installBar = document.getElementById("content-install-bar");
+    const installBarName = document.getElementById("content-install-name");
+    const installBarPercent = document.getElementById(
+        "content-install-percent",
+    );
+    const installBarFill = document.getElementById("content-install-fill");
+    const worldsGrid = document.getElementById("worlds-grid");
+    const worldsCount = document.getElementById("worlds-count");
+    const worldsOpenFolder = document.getElementById("worlds-open-folder");
+    const worldsRefresh = document.getElementById("worlds-refresh");
 
     const provider = "modrinth";
     let currentManagedBuildId = "";
     let contentType = "mod";
 
-    // Состояние бесконечной прокрутки/фильтров
+    // Состояние постраничной навигации/фильтров
     const PAGE_SIZE = 20;
-    let offset = 0;
+    let page = 0;
     let total = 0;
     let hasMore = false;
     let loadingPage = false;
@@ -3253,6 +3322,16 @@ document.addEventListener("DOMContentLoaded", () => {
     saveBtn?.addEventListener("click", saveCustomModpack);
     searchInput?.addEventListener("input", debounce(resetAndLoad, 350));
     sortSelect?.addEventListener("change", resetAndLoad);
+    prevBtn?.addEventListener("click", () => {
+        if (loadingPage || page <= 0) return;
+        page -= 1;
+        loadPage();
+    });
+    nextBtn?.addEventListener("click", () => {
+        if (loadingPage || !hasMore) return;
+        page += 1;
+        loadPage();
+    });
     filterToggle?.addEventListener("click", () => {
         categoriesEl.classList.toggle("hidden");
     });
@@ -3264,12 +3343,169 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     });
 
+    // Мини-кнопка сохранени�� описания (режим управления).
+    manageDescSave?.addEventListener("click", async () => {
+        if (!currentManagedBuildId) return;
+        const description = (manageDescInput?.value || "").trim();
+        const original = manageDescSave.innerHTML;
+        manageDescSave.disabled = true;
+        manageDescSave.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try {
+            const result = await eel.save_custom_modpack({
+                id: currentManagedBuildId,
+                name: nameInput.value.trim(),
+                description,
+                version: versionSelect.value,
+                loader: loaderSelect.value,
+                provider,
+            })();
+            if (result?.ok) {
+                descInput.value = description;
+                manageDescSave.innerHTML =
+                    '<i class="fas fa-check"></i><span>Сохранено</span>';
+                toast({ title: "Описание сохранено", type: "success" });
+                updateVersionGrid();
+            } else {
+                manageDescSave.innerHTML = original;
+                toast({
+                    title: "Не удалось сохранить",
+                    message: result?.error || "",
+                    type: "error",
+                });
+            }
+        } catch (e) {
+            manageDescSave.innerHTML = original;
+            toast({ title: "Ошибка сохранения", type: "error" });
+        } finally {
+            setTimeout(() => {
+                manageDescSave.disabled = false;
+                manageDescSave.innerHTML = original;
+            }, 1400);
+        }
+    });
+
+    // Поделиться сборкой.
+    shareBtn?.addEventListener("click", () => {
+        if (!currentManagedBuildId) return;
+        startShareBuild(
+            currentManagedBuildId,
+            nameInput.value || currentManagedBuildId,
+        );
+    });
+
+    // Кнопки панели миров.
+    worldsRefresh?.addEventListener("click", () => loadWorlds());
+    worldsOpenFolder?.addEventListener("click", async () => {
+        if (!currentManagedBuildId) return;
+        try {
+            await eel.open_saves_folder(currentManagedBuildId)();
+        } catch (e) {
+            toast({ title: "Не удалось открыть папку", type: "error" });
+        }
+    });
+
+    async function loadWorlds() {
+        const buildId = currentManagedBuildId || editIdInput.value;
+        if (!buildId || !worldsGrid) return;
+        worldsGrid.innerHTML =
+            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка миров…</p></div>';
+        let worlds = [];
+        try {
+            worlds = (await eel.list_worlds(buildId)()) || [];
+        } catch (e) {
+            worldsGrid.innerHTML =
+                '<div class="mod-empty"><i class="fas fa-exclamation-triangle"></i><p>Не удалось загрузить миры</p></div>';
+            return;
+        }
+        if (worldsCount) worldsCount.textContent = worlds.length;
+        if (!worlds.length) {
+            worldsGrid.innerHTML =
+                '<div class="mod-empty"><i class="fas fa-earth-americas"></i><p>В этой сборке пока нет миров</p></div>';
+            return;
+        }
+        const GAMEMODES = {
+            0: "Выживание",
+            1: "Творческий",
+            2: "Приключение",
+            3: "Наблюдатель",
+        };
+        worldsGrid.innerHTML = "";
+        worlds.forEach((w) => {
+            const card = document.createElement("div");
+            card.className = "world-card";
+            const iconHtml = w.icon
+                ? `<img src="${w.icon}" alt="" loading="lazy">`
+                : '<div class="world-card-noicon"><i class="fas fa-image"></i></div>';
+            const gamemode =
+                w.gamemode != null && GAMEMODES[w.gamemode]
+                    ? GAMEMODES[w.gamemode]
+                    : "";
+            const meta = [
+                w.version
+                    ? `<span><i class="fas fa-cube"></i> ${escapeHtml(w.version)}</span>`
+                    : "",
+                gamemode
+                    ? `<span><i class="fas fa-gamepad"></i> ${escapeHtml(gamemode)}</span>`
+                    : "",
+                w.hardcore
+                    ? `<span class="world-hardcore"><i class="fas fa-heart-crack"></i> Хардкор</span>`
+                    : "",
+                w.size_label
+                    ? `<span><i class="fas fa-hard-drive"></i> ${escapeHtml(w.size_label)}</span>`
+                    : "",
+                w.last_played
+                    ? `<span><i class="fas fa-clock"></i> ${escapeHtml(w.last_played)}</span>`
+                    : "",
+            ]
+                .filter(Boolean)
+                .join("");
+            card.innerHTML = `
+                <div class="world-card-cover">${iconHtml}</div>
+                <div class="world-card-body">
+                    <div class="world-card-name">${escapeHtml(w.name || w.folder || "Без названия")}</div>
+                    <div class="world-card-meta">${meta}</div>
+                </div>
+                <button class="world-delete-btn" title="Удалить мир"><i class="fas fa-trash"></i></button>`;
+            card.querySelector(".world-delete-btn").addEventListener(
+                "click",
+                async (e) => {
+                    e.stopPropagation();
+                    const confirmed = await showConfirmDialog({
+                        title: "Удалить мир?",
+                        message: `Мир «${w.name || w.folder}» будет удалён без возможности восстановления.`,
+                        confirmText: "Удалить",
+                        cancelText: "Отмена",
+                        danger: true,
+                    });
+                    if (!confirmed) return;
+                    try {
+                        await eel.delete_world(buildId, w.folder)();
+                        loadWorlds();
+                        toast({ title: "Мир удалён", type: "info" });
+                    } catch (err) {
+                        toast({ title: "Ошибка удаления", type: "error" });
+                    }
+                },
+            );
+            worldsGrid.appendChild(card);
+        });
+    }
+
     contentTabBtns.forEach((tab) => {
         tab.addEventListener("click", () => {
             contentTabBtns.forEach((t) => t.classList.remove("active"));
             tab.classList.add("active");
             contentType = tab.dataset.content || "mod";
             applyContentLabels();
+            if (contentType === "world") {
+                // Миры — отдельная панель, без каталога Modrinth.
+                if (modsLayoutEl) modsLayoutEl.style.display = "none";
+                if (worldsPanel) worldsPanel.style.display = "block";
+                loadWorlds();
+                return;
+            }
+            if (modsLayoutEl) modsLayoutEl.style.display = "grid";
+            if (worldsPanel) worldsPanel.style.display = "none";
             searchInput.value = "";
             selectedCategories.clear();
             renderCategories();
@@ -3317,6 +3553,7 @@ document.addEventListener("DOMContentLoaded", () => {
             setCreateUiVisible(true);
             setManageUiVisible(false);
             saveRow.style.display = "flex";
+            if (worldsPanel) worldsPanel.style.display = "none";
             nameInput.disabled = false;
             descInput.disabled = false;
             versionSelect.disabled = false;
@@ -3326,13 +3563,22 @@ document.addEventListener("DOMContentLoaded", () => {
             modalTitle.textContent = "Управление сборкой";
             modalSubtitle.textContent =
                 modpackData.name || modpackData.id || "Сборка";
-            saveBtn.innerHTML =
-                '<i class="fas fa-save"></i> Сохранить описание';
             setCreateUiVisible(false);
             setManageUiVisible(true);
-            saveRow.style.display = "flex";
+            // В режиме управления нижняя кнопка «Сохранить» не нужна —
+            // описание сохраняется своей мини-кнопкой, остальное — при закрытии.
+            saveRow.style.display = "none";
+            if (worldsPanel) worldsPanel.style.display = "none";
+            if (modsLayoutEl) modsLayoutEl.style.display = "grid";
+            // Сбрасываем активную вкладку на «Моды».
+            contentTabBtns.forEach((t) =>
+                t.classList.toggle("active", t.dataset.content === "mod"),
+            );
             nameInput.value = modpackData.name || "";
             descInput.value = modpackData.description || modpackData.desc || "";
+            if (manageDescInput)
+                manageDescInput.value =
+                    modpackData.description || modpackData.desc || "";
             versionSelect.innerHTML = `<option value="${escapeHtml(modpackData.version)}">${escapeHtml(modpackData.version)}</option>`;
             loaderSelect.innerHTML = `<option value="${escapeHtml(modpackData.loader)}">${escapeHtml(modpackData.loader === "fabric" ? "Fabric" : "Forge")}</option>`;
             versionSelect.value = modpackData.version || "";
@@ -3366,9 +3612,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (filterCount) filterCount.textContent = "";
         document.getElementById("mods-count-badge").textContent = "0";
         document.getElementById("installed-mods-count").textContent = "0";
-        offset = 0;
+        page = 0;
         total = 0;
         hasMore = false;
+        if (paginationEl) paginationEl.classList.add("hidden");
         installedNames = new Set();
         if (createNote)
             createNote.textContent = "Ядро появится после выбора версии";
@@ -3535,27 +3782,40 @@ document.addEventListener("DOMContentLoaded", () => {
             : "";
     }
 
-    // ---------- Загрузка каталога с пагинацией ----------
+    // ---------- Загрузка каталога постранично ----------
     function resetAndLoad() {
         if (modeInput.value !== "manage" || !versionSelect.value) return;
-        offset = 0;
+        page = 0;
         total = 0;
         hasMore = false;
-        resultsEl.innerHTML =
-            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
-        loadPage(true);
+        loadPage();
     }
 
-    async function loadPage(isFirst = false) {
+    function updatePagination() {
+        if (!paginationEl) return;
+        const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        if (total <= PAGE_SIZE && page === 0) {
+            paginationEl.classList.add("hidden");
+        } else {
+            paginationEl.classList.remove("hidden");
+        }
+        if (pageIndicator)
+            pageIndicator.textContent = `Стр. ${page + 1} из ${totalPages}`;
+        if (prevBtn) prevBtn.disabled = page <= 0 || loadingPage;
+        if (nextBtn) nextBtn.disabled = !hasMore || loadingPage;
+    }
+
+    async function loadPage() {
         if (loadingPage) return;
-        if (!isFirst && !hasMore) return;
         const version = versionSelect.value;
         const loader = loaderSelect.value;
         if (modeInput.value !== "manage" || !version) return;
 
         loadingPage = true;
+        updatePagination();
         const token = ++searchToken;
-        if (!isFirst) appendLoadingRow();
+        resultsEl.innerHTML =
+            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загр��зка...</p></div>';
         try {
             const res = await eel.search_content(
                 contentType,
@@ -3564,43 +3824,33 @@ document.addEventListener("DOMContentLoaded", () => {
                 loader,
                 PAGE_SIZE,
                 sortSelect ? sortSelect.value : "relevance",
-                offset,
+                page * PAGE_SIZE,
                 [...selectedCategories],
             )();
             if (token !== searchToken) return; // устаревший ответ
-            removeLoadingRow();
             const items = (res && res.results) || [];
             total = res?.total ?? items.length;
             hasMore = !!res?.has_more;
-            offset += items.length;
             document.getElementById("mods-count-badge").textContent =
                 total.toLocaleString("ru-RU");
 
-            if (isFirst && !items.length) {
+            if (!items.length) {
                 resultsEl.innerHTML =
                     '<div class="mod-empty"><i class="fas fa-search"></i><p>Ничего не найдено</p></div>';
+                updatePagination();
                 return;
             }
-            if (isFirst) resultsEl.innerHTML = "";
+            resultsEl.innerHTML = "";
             appendItems(items, version, loader);
+            // Прокручиваем список наверх при переходе на новую страницу.
+            resultsEl.scrollTop = 0;
         } catch (e) {
-            removeLoadingRow();
-            if (isFirst)
-                resultsEl.innerHTML =
-                    '<div class="mod-empty"><i class="fas fa-exclamation-triangle"></i><p>Ошибка загрузки каталога</p></div>';
+            resultsEl.innerHTML =
+                '<div class="mod-empty"><i class="fas fa-exclamation-triangle"></i><p>Ошибка загрузки каталога</p></div>';
         } finally {
             loadingPage = false;
+            updatePagination();
         }
-    }
-
-    function appendLoadingRow() {
-        const row = document.createElement("div");
-        row.className = "mods-loading-row";
-        row.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
-        resultsEl.appendChild(row);
-    }
-    function removeLoadingRow() {
-        resultsEl.querySelector(".mods-loading-row")?.remove();
     }
 
     function appendItems(items, version, loader) {
@@ -3663,16 +3913,58 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ---------- Установка с разрешением зависимостей ----------
-    async function installSingle(projectId, version, loader) {
-        const r = await eel.install_content(
-            contentType,
-            provider,
-            projectId,
-            currentManagedBuildId,
-            version,
-            loader,
-        )();
-        return r;
+    function showInstallBar(name) {
+        if (!installBar) return;
+        installBar.classList.remove("hidden");
+        if (installBarName)
+            installBarName.textContent = name
+                ? `Установка: ${name}`
+                : "Установка…";
+        if (installBarPercent) installBarPercent.textContent = "0%";
+        if (installBarFill) {
+            installBarFill.classList.remove("indeterminate");
+            installBarFill.style.width = "0%";
+        }
+    }
+    function setInstallBar(percent, name) {
+        // -1 — размер файла неизвестен: показываем неопределённый прогресс.
+        if (percent === -1) {
+            if (installBarPercent) installBarPercent.textContent = "…";
+            if (installBarFill) installBarFill.classList.add("indeterminate");
+            if (name && installBarName)
+                installBarName.textContent = `Установка: ${name}`;
+            return;
+        }
+        if (installBarFill) installBarFill.classList.remove("indeterminate");
+        const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
+        if (installBarPercent) installBarPercent.textContent = `${p}%`;
+        if (installBarFill) installBarFill.style.width = `${p}%`;
+        if (name && installBarName)
+            installBarName.textContent = `Установка: ${name}`;
+    }
+    function hideInstallBar() {
+        if (installBar) installBar.classList.add("hidden");
+        window.__contentInstallProgress = null;
+    }
+
+    async function installSingle(projectId, version, loader, displayName) {
+        showInstallBar(displayName);
+        window.__contentInstallProgress = (percent) =>
+            setInstallBar(percent, displayName);
+        try {
+            const r = await eel.install_content(
+                contentType,
+                provider,
+                projectId,
+                currentManagedBuildId,
+                version,
+                loader,
+            )();
+            setInstallBar(100, displayName);
+            return r;
+        } finally {
+            window.__contentInstallProgress = null;
+        }
     }
 
     async function handleInstall(btn, mod, version, loader) {
@@ -3710,12 +4002,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
             btn.textContent = "Установка...";
             // Сначала зависимости, затем сам мод
+            const depById = new Map(deps.map((d) => [d.project_id, d]));
             for (const pid of toInstall) {
                 try {
-                    await installSingle(pid, version, loader);
+                    await installSingle(
+                        pid,
+                        version,
+                        loader,
+                        depById.get(pid)?.title || "зависимость",
+                    );
                 } catch (e) {}
             }
-            const r = await installSingle(mod.project_id, version, loader);
+            const r = await installSingle(
+                mod.project_id,
+                version,
+                loader,
+                mod.title || "",
+            );
+            hideInstallBar();
             if (r.ok) {
                 btn.textContent = r.already_installed
                     ? "Уже есть"
@@ -3724,7 +4028,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 await loadInstalledContent();
                 if (toInstall.length) {
                     toast({
-                        title: "Готово",
+                        title: "��отово",
                         message: `Установлено зависимостей: ${toInstall.length}`,
                         type: "success",
                     });
@@ -3749,6 +4053,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }, 1500);
             }
         } catch (e) {
+            hideInstallBar();
             btn.textContent = "Ошибка";
             btn.disabled = false;
         }
@@ -3821,19 +4126,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Бесконечная прокрутка через IntersectionObserver
-    if (sentinel && "IntersectionObserver" in window) {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting && hasMore && !loadingPage) {
-                    loadPage(false);
-                }
-            },
-            { root: resultsEl, rootMargin: "120px" },
-        );
-        observer.observe(sentinel);
-    }
-
     function debounce(fn, delay) {
         let timer;
         return function (...args) {
@@ -3844,3 +4136,317 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 window.openModpackModal = (...args) => openModpackModal?.(...args);
+
+// ===================== Поделиться сборкой / Загрузить сборку =====================
+let startShareBuild = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+    // ---------- Share (export) ----------
+    const shareModal = document.getElementById("share-modal");
+    const closeShare = document.getElementById("close-share-modal");
+    const shareSubtitle = document.getElementById("share-modal-subtitle");
+    const shareProgressBlock = document.getElementById("share-progress-block");
+    const shareStage = document.getElementById("share-progress-stage");
+    const sharePercent = document.getElementById("share-progress-percent");
+    const shareFill = document.getElementById("share-progress-fill");
+    const shareLog = document.getElementById("share-log");
+    const shareResult = document.getElementById("share-result");
+    const shareResultPath = document.getElementById("share-result-path");
+    const shareOpenFolder = document.getElementById("share-open-folder");
+    let lastSharePath = "";
+
+    function closeShareModal() {
+        shareModal?.classList.add("hidden");
+        window.__shareProgress = null;
+    }
+    closeShare?.addEventListener("click", closeShareModal);
+    shareModal?.addEventListener("click", (e) => {
+        if (e.target === shareModal) closeShareModal();
+    });
+    shareOpenFolder?.addEventListener("click", async () => {
+        if (!lastSharePath) return;
+        try {
+            await eel.open_share_folder(lastSharePath)();
+        } catch (e) {
+            toast({ title: "Не удалось открыть папку", type: "error" });
+        }
+    });
+
+    function appendShareLog(message) {
+        if (!shareLog || !message) return;
+        const li = document.createElement("li");
+        li.textContent = message;
+        shareLog.appendChild(li);
+        shareLog.scrollTop = shareLog.scrollHeight;
+    }
+    function setShareProgress(percent, stage, log) {
+        const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
+        if (sharePercent) sharePercent.textContent = `${p}%`;
+        if (shareFill) shareFill.style.width = `${p}%`;
+        if (stage && shareStage) shareStage.textContent = stage;
+        if (log) appendShareLog(log);
+    }
+
+    startShareBuild = async function (buildId, displayName) {
+        if (!shareModal) return;
+        shareModal.classList.remove("hidden");
+        if (shareSubtitle)
+            shareSubtitle.textContent = `Упаковка сборки «${displayName}»`;
+        if (shareProgressBlock) shareProgressBlock.classList.remove("hidden");
+        if (shareResult) shareResult.classList.add("hidden");
+        if (shareLog) shareLog.innerHTML = "";
+        lastSharePath = "";
+        setShareProgress(0, "Подготовка…");
+        window.__shareProgress = setShareProgress;
+        try {
+            const res = await eel.share_build(buildId)();
+            window.__shareProgress = null;
+            if (res?.ok) {
+                setShareProgress(100, "Готово");
+                lastSharePath = res.folder || res.path || "";
+                if (shareResultPath)
+                    shareResultPath.textContent = res.path || res.folder || "";
+                if (shareProgressBlock)
+                    shareProgressBlock.classList.add("hidden");
+                if (shareResult) shareResult.classList.remove("hidden");
+            } else {
+                appendShareLog(`Ошибка: ${res?.error || "неизвестно"}`);
+                toast({
+                    title: "Не удалось собрать архив",
+                    message: res?.error || "",
+                    type: "error",
+                });
+            }
+        } catch (e) {
+            window.__shareProgress = null;
+            appendShareLog("Ошибка упаковки сборки");
+            toast({ title: "Ошибка при упаковке", type: "error" });
+        }
+    };
+
+    // ---------- Import (upload) ----------
+    const importModal = document.getElementById("import-modal");
+    const openImport = document.getElementById("open-modpack-importer");
+    const closeImport = document.getElementById("close-import-modal");
+    const dropzone = document.getElementById("import-dropzone");
+    const selectedBox = document.getElementById("import-selected");
+    const selectedName = document.getElementById("import-selected-name");
+    const summaryEl = document.getElementById("import-summary");
+    const importProgressBlock = document.getElementById(
+        "import-progress-block",
+    );
+    const importStage = document.getElementById("import-progress-stage");
+    const importPercent = document.getElementById("import-progress-percent");
+    const importFill = document.getElementById("import-progress-fill");
+    const importLog = document.getElementById("import-log");
+    const importInstallBtn = document.getElementById("import-install-btn");
+    let selectedArchivePath = "";
+
+    function closeImportModal() {
+        importModal?.classList.add("hidden");
+        window.__importProgress = null;
+    }
+    openImport?.addEventListener("click", () => {
+        if (!importModal) return;
+        importModal.classList.remove("hidden");
+        selectedArchivePath = "";
+        if (selectedBox) selectedBox.classList.add("hidden");
+        if (summaryEl) {
+            summaryEl.classList.add("hidden");
+            summaryEl.innerHTML = "";
+        }
+        if (importProgressBlock) importProgressBlock.classList.add("hidden");
+        if (importLog) importLog.innerHTML = "";
+        if (importInstallBtn) importInstallBtn.disabled = true;
+    });
+    closeImport?.addEventListener("click", closeImportModal);
+    importModal?.addEventListener("click", (e) => {
+        if (e.target === importModal) closeImportModal();
+    });
+
+    async function inspectArchive(path) {
+        if (!path) return;
+        selectedArchivePath = path;
+        if (selectedName)
+            selectedName.textContent = path.split(/[\\/]/).pop() || path;
+        if (selectedBox) selectedBox.classList.remove("hidden");
+        if (summaryEl) {
+            summaryEl.classList.remove("hidden");
+            summaryEl.innerHTML =
+                '<i class="fas fa-spinner fa-spin"></i> Чтение манифеста…';
+        }
+        try {
+            const info = await eel.inspect_build_archive(path)();
+            if (!info?.ok) {
+                if (summaryEl)
+                    summaryEl.innerHTML = `<span class="import-error">Ошибка: ${info?.error || "не удалось прочитать"}</span>`;
+                if (importInstallBtn) importInstallBtn.disabled = true;
+                return;
+            }
+            const m = info.manifest || {};
+            const counts = info.counts || {};
+            if (summaryEl) {
+                summaryEl.style.flexDirection = "column";
+                summaryEl.innerHTML = `
+                    <div class="import-summary-title"><i class="fas fa-box-archive"></i> ${escapeHtml(m.name || "Сборка")}</div>
+                    <div class="import-summary-meta">
+                        <span><i class="fas fa-cube"></i> Minecraft ${escapeHtml(m.version || "?")}</span>
+                        <span><i class="fas fa-layer-group"></i> ${escapeHtml(m.loader === "fabric" ? "Fabric" : m.loader === "forge" ? "Forge" : "Vanilla")}</span>
+                    </div>
+                    <div class="import-summary-counts">
+                        <span><i class="fas fa-puzzle-piece"></i> Моды: ${counts.mod || 0}</span>
+                        <span><i class="fas fa-image"></i> Текстуры: ${counts.resourcepack || 0}</span>
+                        <span><i class="fas fa-wand-magic-sparkles"></i> Шейдеры: ${counts.shader || 0}</span>
+                        <span><i class="fas fa-earth-americas"></i> Миры: ${counts.worlds || 0}</span>
+                    </div>`;
+            }
+            if (importInstallBtn) importInstallBtn.disabled = false;
+        } catch (e) {
+            if (summaryEl)
+                summaryEl.innerHTML =
+                    '<span class="import-error">Не удалось прочитать архив</span>';
+            if (importInstallBtn) importInstallBtn.disabled = true;
+        }
+    }
+
+    async function pickArchive() {
+        try {
+            const path = await eel.pick_build_archive()();
+            if (path) inspectArchive(path);
+        } catch (e) {
+            toast({ title: "Не удалось открыть проводник", type: "error" });
+        }
+    }
+
+    dropzone?.addEventListener("click", pickArchive);
+    dropzone?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            pickArchive();
+        }
+    });
+    ["dragenter", "dragover"].forEach((ev) =>
+        dropzone?.addEventListener(ev, (e) => {
+            e.preventDefault();
+            dropzone.classList.add("dragover");
+        }),
+    );
+    ["dragleave", "drop"].forEach((ev) =>
+        dropzone?.addEventListener(ev, (e) => {
+            e.preventDefault();
+            dropzone.classList.remove("dragover");
+        }),
+    );
+    dropzone?.addEventListener("drop", async (e) => {
+        const file = e.dataTransfer?.files?.[0];
+        console.log("0");
+        if (!file) return;
+        // 1) Если среда отдаёт полный путь (webview) — используем его напрямую.
+        if (file.path) {
+            console.log("1");
+            inspectArchive(file.path);
+            return;
+        }
+        // 2) Иначе читаем файл и сохраняем во временную папку через backend.
+        console.log("2");
+        if (summaryEl) {
+            summaryEl.classList.remove("hidden");
+            summaryEl.innerHTML =
+                '<i class="fas fa-spinner fa-spin"></i> Загрузка файла…';
+        }
+        try {
+            const buf = await file.arrayBuffer();
+            const bytes = new Uint8Array(buf);
+            let binary = "";
+            const CHUNK = 0x8000;
+            for (let i = 0; i < bytes.length; i += CHUNK) {
+                binary += String.fromCharCode.apply(
+                    null,
+                    bytes.subarray(i, i + CHUNK),
+                );
+            }
+            const base64 = btoa(binary);
+            const saved = await eel.receive_build_archive(file.name, base64)();
+            if (saved?.ok && saved.path) {
+                inspectArchive(saved.path);
+            } else {
+                if (summaryEl)
+                    summaryEl.innerHTML =
+                        '<span class="import-error">Не удалось сохранить файл</span>';
+            }
+        } catch (err) {
+            if (summaryEl)
+                summaryEl.innerHTML =
+                    '<span class="import-error">Не удалось прочитать файл</span>';
+        }
+    });
+
+    function appendImportLog(message) {
+        if (!importLog || !message) return;
+        const li = document.createElement("li");
+        li.textContent = message;
+        importLog.appendChild(li);
+        importLog.scrollTop = importLog.scrollHeight;
+    }
+    function setImportProgress(percent, stage, log) {
+        const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
+        if (importPercent) importPercent.textContent = `${p}%`;
+        if (importFill) importFill.style.width = `${p}%`;
+        if (stage && importStage) importStage.textContent = stage;
+        if (log) appendImportLog(log);
+    }
+
+    importInstallBtn?.addEventListener("click", async () => {
+        if (!selectedArchivePath) return;
+        importInstallBtn.disabled = true;
+        if (importProgressBlock) importProgressBlock.classList.remove("hidden");
+        if (importLog) importLog.innerHTML = "";
+        setImportProgress(0, "Подготовка…");
+        window.__importProgress = setImportProgress;
+        // Прогресс установки ядра идёт по каналу updateProgressDownload.
+        // Отображаем его реальным движением полоски в диапазоне 3–54%,
+        // чтобы полоска не зависала на 3% во время скачивания ядра.
+        let coreLogged = false;
+        window.__coreDownloadProgress = (corePercent) => {
+            const mapped = 3 + (corePercent / 100) * 51;
+            setImportProgress(
+                mapped,
+                "Установка ядра…",
+                !coreLogged ? "Скачивание файлов ядра" : null,
+            );
+            coreLogged = true;
+        };
+        try {
+            const res = await eel.install_build_archive(selectedArchivePath)();
+            window.__importProgress = null;
+            window.__coreDownloadProgress = null;
+            if (res?.ok) {
+                setImportProgress(100, "Готово");
+                toast({
+                    title: "Сборка установлена",
+                    message: res.build_name || "",
+                    type: "success",
+                });
+                // Обновляем и сетку версий, и нижний селект, чтобы импортированная
+                // сборка сразу появилась в выборе версий без перезапуска лаунчера.
+                await updateVersionGrid();
+                await updateVersionSelect();
+                setTimeout(closeImportModal, 900);
+            } else {
+                appendImportLog(`Ошибка: ${res?.error || "неизвестно"}`);
+                importInstallBtn.disabled = false;
+                toast({
+                    title: "Не удалось установить сборку",
+                    message: res?.error || "",
+                    type: "error",
+                });
+            }
+        } catch (e) {
+            window.__importProgress = null;
+            window.__coreDownloadProgress = null;
+            appendImportLog("Ошибка установки сборки");
+            importInstallBtn.disabled = false;
+            toast({ title: "Ошибка установки", type: "error" });
+        }
+    });
+});
