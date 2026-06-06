@@ -630,7 +630,7 @@
                         <!-- ============== PEERS LIST ============== -->
                         <section class="net-peers-section">
                             <header class="net-peers-head">
-                                <h4>Участники комнаты</h4>
+                                <h4>Уч��стники комнаты</h4>
                                 <div class="net-peers-actions">
                                     <button
                                         id="network-refresh-btn"
@@ -2111,22 +2111,6 @@
         <script src="js/main.js"></script>
         <script src="js/customization.js"></script>
         <script src="js/network-room.js"></script>
-        <script>
-            function toggleServerSelect() {
-                var versionSelect = document.querySelector(".version-select");
-                var serverSelect = document.querySelector(".server-select");
-                var selectedOption =
-                    versionSelect.options[versionSelect.selectedIndex];
-                if (
-                    selectedOption &&
-                    selectedOption.text === "LunarПВП 1.8.9"
-                ) {
-                    serverSelect.style.display = "block";
-                } else {
-                    serverSelect.style.display = "none";
-                }
-            }
-        </script>
         <script type="module">
             try {
                 const [dateStr, totalHoursPlayed] =

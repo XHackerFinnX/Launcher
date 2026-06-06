@@ -1182,16 +1182,14 @@ async function updateVersionSelect() {
     uniqueVersions.forEach((versionValue) => {
         const option = new Option(`${versionValue}`, versionValue);
         versionSelect.add(option);
-        if (versionValue == versiondata) {
-            const ss = document.querySelector(".server-select");
-            versionSelect.value = versiondata;
-            if (versiondata === "LunarПВП 1.8.9") {
-                ss.style.display = "block";
-            } else {
-                ss.style.display = "none";
-            }
-        }
     });
+
+    // Восстанавливаем сохранённый выбор версии из БД.
+    if (versiondata && uniqueVersions.includes(versiondata)) {
+        versionSelect.value = versiondata;
+    }
+    // Видимость селекта сервера зависит только от выбранной версии.
+    toggleServerSelect();
 
     playBtn.disabled = !versionSelect.value || isDownloading;
     renderVersionCombo();
@@ -1440,6 +1438,16 @@ async function getIpAddress() {
     }
 }
 
+// Единственный источник правды для видимости селекта сервера.
+// Сервер показываем ТОЛЬКО когда выбрана версия LunarПВП 1.8.9.
+function toggleServerSelect() {
+    const vs = document.querySelector(".version-select");
+    const ss = document.querySelector(".server-select");
+    if (!vs || !ss) return;
+    const selected = vs.value || "";
+    ss.style.display = selected === "LunarПВП 1.8.9" ? "block" : "none";
+}
+
 async function updateServerSelect() {
     const ss = document.querySelector(".server-select");
     while (ss.options.length > 1) ss.remove(1);
@@ -1452,12 +1460,9 @@ async function updateServerSelect() {
         new Set((serverIps || []).map((ip) => normalizeServerIp(ip))),
     ).filter(Boolean);
 
-    if (uniqueIps.length === 0) {
-        ss.style.display = "none";
-    } else {
-        ss.style.display = "";
-        uniqueIps.forEach((ip) => ss.add(new Option(ip, ip)));
-    }
+    // Только наполняем список адресов — видимость зависит исключительно от версии.
+    uniqueIps.forEach((ip) => ss.add(new Option(ip, ip)));
+    toggleServerSelect();
 }
 
 // ---------- Accounts ----------
@@ -1583,7 +1588,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!inserted) {
                 toast({
                     title: "Не удалось добавить",
-                    message: "Возможно, такой ник уже есть",
+                    message: "Во��можно, такой ник уже есть",
                     type: "error",
                 });
                 return;
@@ -3329,7 +3334,7 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     });
 
-    // Мини-кнопка сохранения описания (режим управления).
+    // Мини-кнопка сохранени�� описания (режим управления).
     manageDescSave?.addEventListener("click", async () => {
         if (!currentManagedBuildId) return;
         const description = (manageDescInput?.value || "").trim();
@@ -3791,7 +3796,7 @@ document.addEventListener("DOMContentLoaded", () => {
         updatePagination();
         const token = ++searchToken;
         resultsEl.innerHTML =
-            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
+            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загр��зка...</p></div>';
         try {
             const res = await eel.search_content(
                 contentType,
@@ -3895,9 +3900,21 @@ document.addEventListener("DOMContentLoaded", () => {
         if (installBarName)
             installBarName.textContent = name ? `Установка: ${name}` : "Установка…";
         if (installBarPercent) installBarPercent.textContent = "0%";
-        if (installBarFill) installBarFill.style.width = "0%";
+        if (installBarFill) {
+            installBarFill.classList.remove("indeterminate");
+            installBarFill.style.width = "0%";
+        }
     }
     function setInstallBar(percent, name) {
+        // -1 — размер файла неизвестен: показываем неопределённый прогресс.
+        if (percent === -1) {
+            if (installBarPercent) installBarPercent.textContent = "…";
+            if (installBarFill) installBarFill.classList.add("indeterminate");
+            if (name && installBarName)
+                installBarName.textContent = `Установка: ${name}`;
+            return;
+        }
+        if (installBarFill) installBarFill.classList.remove("indeterminate");
         const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
         if (installBarPercent) installBarPercent.textContent = `${p}%`;
         if (installBarFill) installBarFill.style.width = `${p}%`;
@@ -3990,7 +4007,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 await loadInstalledContent();
                 if (toInstall.length) {
                     toast({
-                        title: "Готово",
+                        title: "��отово",
                         message: `Установлено зависимостей: ${toInstall.length}`,
                         type: "success",
                     });
@@ -4371,7 +4388,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     message: res.build_name || "",
                     type: "success",
                 });
+                // Обновляем и сетку версий, и нижний селект, чтобы импортированная
+                // сборка сразу появилась в выборе версий без перезапуска лаунчера.
                 await updateVersionGrid();
+                await updateVersionSelect();
                 setTimeout(closeImportModal, 900);
             } else {
                 appendImportLog(`Ошибка: ${res?.error || "неизвестно"}`);
