@@ -1210,12 +1210,19 @@ const circularProgress = document.querySelector(".circular-progress");
 const progressCircle = document.querySelector(".circular-progress .progress");
 const progressText = document.querySelector(".progress-text");
 
+// Доп. подписчик на прогресс установки ядра (используется импортом сборки),
+// чтобы показывать тот же реальный прогресс на полоске загрузки сборки.
+window.__coreDownloadProgress = null;
+
 function updateProgressDownload(percent) {
     const validPercent = Math.max(0, Math.min(percent, 100));
     // r=27 → 2π*27 ≈ 169.646
     const dashoffset = 169.646 - (169.646 * validPercent) / 100;
     progressCircle.style.strokeDashoffset = dashoffset;
     progressText.textContent = `${Math.round(validPercent)}%`;
+    if (typeof window.__coreDownloadProgress === "function") {
+        window.__coreDownloadProgress(validPercent);
+    }
 }
 
 try {
@@ -3975,7 +3982,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     modName: mod.title || "Мод",
                     dependencies: deps,
                 });
-                // choice === [] -> только сам мод (Отменить); иначе выбранные id
+                // choice === [] -> только сам мод (Отменить); ин��че выбранные id
                 toInstall = choice || [];
             }
 
@@ -4378,9 +4385,23 @@ document.addEventListener("DOMContentLoaded", () => {
         if (importLog) importLog.innerHTML = "";
         setImportProgress(0, "Подготовка…");
         window.__importProgress = setImportProgress;
+        // Прогресс установки ядра идёт по каналу updateProgressDownload.
+        // Отображаем его реальным движением полоски в диапазоне 3–54%,
+        // чтобы полоска не зависала на 3% во время скачивания ядра.
+        let coreLogged = false;
+        window.__coreDownloadProgress = (corePercent) => {
+            const mapped = 3 + (corePercent / 100) * 51;
+            setImportProgress(
+                mapped,
+                "Установка ядра…",
+                !coreLogged ? "Скачивание файлов ядра" : null,
+            );
+            coreLogged = true;
+        };
         try {
             const res = await eel.install_build_archive(selectedArchivePath)();
             window.__importProgress = null;
+            window.__coreDownloadProgress = null;
             if (res?.ok) {
                 setImportProgress(100, "Готово");
                 toast({
@@ -4404,6 +4425,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } catch (e) {
             window.__importProgress = null;
+            window.__coreDownloadProgress = null;
             appendImportLog("Ошибка установки сборки");
             importInstallBtn.disabled = false;
             toast({ title: "Ошибка установки", type: "error" });
