@@ -16,6 +16,11 @@ from utils.build_share import (
     share_build, open_share_folder, pick_build_archive,
     receive_build_archive, inspect_build_archive, install_build_archive
 )
+from utils.theme_share import (
+    pick_theme_background_image, read_theme_background_image, save_theme_background_copy,
+    share_theme, open_theme_share_folder, pick_theme_archive,
+    receive_theme_archive, inspect_theme_archive, install_theme_archive
+)
 from db.data import (
     insert_version, get_versions, insert_account, delete_account, get_accounts,
     update_account_version, get_account_version, update_setting_memory,
