@@ -1234,6 +1234,8 @@ try {
 window.__contentInstallProgress = null;
 window.__shareProgress = null;
 window.__importProgress = null;
+window.__themeShareProgress = null;
+window.__themeImportProgress = null;
 
 function updateContentInstallProgress(percent, label) {
     if (typeof window.__contentInstallProgress === "function") {
@@ -1250,10 +1252,22 @@ function updateImportProgress(percent, stage, log) {
         window.__importProgress(percent, stage, log);
     }
 }
+function updateThemeShareProgress(percent, stage, log) {
+    if (typeof window.__themeShareProgress === "function") {
+        window.__themeShareProgress(percent, stage, log);
+    }
+}
+function updateThemeImportProgress(percent, stage, log) {
+    if (typeof window.__themeImportProgress === "function") {
+        window.__themeImportProgress(percent, stage, log);
+    }
+}
 try {
     eel.expose(updateContentInstallProgress);
     eel.expose(updateShareProgress);
     eel.expose(updateImportProgress);
+    eel.expose(updateThemeShareProgress);
+    eel.expose(updateThemeImportProgress);
 } catch (e) {}
 
 // ---------- Play button ----------
@@ -1445,7 +1459,7 @@ async function getIpAddress() {
     }
 }
 
-// Единственный источник правды для видимости селекта сервера.
+// Единственный источник правды для видимос��и селекта сервера.
 // Сервер показываем ТОЛЬКО когда выбрана версия LunarПВП 1.8.9.
 function toggleServerSelect() {
     const vs = document.querySelector(".version-select");
@@ -3815,7 +3829,7 @@ document.addEventListener("DOMContentLoaded", () => {
         updatePagination();
         const token = ++searchToken;
         resultsEl.innerHTML =
-            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загр��зка...</p></div>';
+            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загр����ка...</p></div>';
         try {
             const res = await eel.search_content(
                 contentType,
