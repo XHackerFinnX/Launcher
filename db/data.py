@@ -7,11 +7,13 @@ import socket
 from pathlib import Path
 import eel
 import requests
+import psutil
 import minecraft_launcher_lib
 import json
 import time
 import uuid
 import ipaddress
+import threading
 from datetime import datetime
 from urllib.parse import urljoin
 import urllib.error
@@ -33,6 +35,7 @@ UPDATE_CHECK_TIMEOUT = (3, 5)
 FILE_INTEGRITY_MANIFEST_URL = "https://raw.githubusercontent.com/XHackerFinnX/SLauncher/main/launcher-file.json"
 logger = logging.getLogger(__name__)
 _log_viewer_process = None
+_INTEGRITY_PROCESS_CLOSE_REQUESTS: Dict[str, Dict[str, Any]] = {}
 NETWORK_CONFIG_PATH = Path(r"C:\.stoneworld\db\network.json")
 _TUNNEL_AGENTS: Dict[str, TunnelAgent] = {}
 _RELAY_UNSUPPORTED_CACHE: Dict[str, float] = {}
@@ -1400,7 +1403,184 @@ def delete_versions_list(version):
     except Exception as e:
         print(f"Ошибка при удалении версии: {e}")
         return False
-    
+
+def _launcher_file_versions_path(target_path: Path) -> Path:
+    return Path(target_path).parent / "launcher-file-versions.json"
+
+
+def _load_launcher_file_versions(target_path: Path) -> Dict[str, Any]:
+    versions_path = _launcher_file_versions_path(target_path)
+    try:
+        if not versions_path.exists():
+            return {"files": {}}
+        with versions_path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+        if isinstance(data, dict):
+            files = data.get("files")
+            if isinstance(files, dict):
+                return data
+    except (OSError, ValueError):
+        logger.warning("Не удалось прочитать версии файлов лаунчера: %s", versions_path, exc_info=True)
+    return {"files": {}}
+
+
+def _save_launcher_file_version(target_path: Path, version: str) -> None:
+    version = str(version or "").strip()
+    if not version:
+        return
+
+    versions_path = _launcher_file_versions_path(target_path)
+    data = _load_launcher_file_versions(target_path)
+    files = data.setdefault("files", {})
+    files[Path(target_path).name] = {
+        "version": version,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+    versions_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = versions_path.with_suffix(versions_path.suffix + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=4)
+    tmp_path.replace(versions_path)
+
+
+def _get_launcher_file_version(target_path: Path) -> str:
+    data = _load_launcher_file_versions(target_path)
+    entry = data.get("files", {}).get(Path(target_path).name, {})
+    if isinstance(entry, dict):
+        return str(entry.get("version") or "").strip()
+    return ""
+
+
+def _normalize_file_identity(path: Path) -> str:
+    return os.path.normcase(os.path.abspath(str(path)))
+
+
+def _process_matches_target(proc_info: Dict[str, Any], target_path: Path) -> bool:
+    target_name = target_path.name.lower()
+    target_identity = _normalize_file_identity(target_path)
+    matched_by_name = str(proc_info.get("name") or "").lower() == target_name
+    has_path_identity = False
+
+    exe = str(proc_info.get("exe") or "")
+    if exe:
+        has_path_identity = True
+        try:
+            if _normalize_file_identity(Path(exe)) == target_identity:
+                return True
+        except (OSError, ValueError):
+            pass
+
+    cmdline = proc_info.get("cmdline") or []
+    if isinstance(cmdline, (list, tuple)):
+        for arg in cmdline:
+            if not arg:
+                continue
+            has_path_identity = True
+            try:
+                if _normalize_file_identity(Path(str(arg))) == target_identity:
+                    return True
+            except (OSError, ValueError):
+                continue
+
+    return matched_by_name and not has_path_identity
+
+
+def _find_running_processes_for_file(target_path: Path) -> list:
+    processes = []
+    for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
+        try:
+            info = proc.info
+            if not _process_matches_target(info, target_path):
+                continue
+            processes.append({
+                "pid": int(info.get("pid") or proc.pid),
+                "name": str(info.get("name") or target_path.name),
+                "exe": str(info.get("exe") or ""),
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return processes
+
+
+@eel.expose
+def answer_integrity_process_close(request_id, should_close):
+    request_id = str(request_id or "").strip()
+    request = _INTEGRITY_PROCESS_CLOSE_REQUESTS.get(request_id)
+    if not request:
+        return {"ok": False, "error": "unknown_request"}
+
+    request["decision"] = bool(should_close)
+    event = request.get("event")
+    if event:
+        event.set()
+    return {"ok": True}
+
+
+@eel.expose
+def cancel_integrity_process_close(request_id):
+    return answer_integrity_process_close(request_id, False)
+
+
+def _ask_close_running_file_processes(file_name: str, processes: list) -> bool:
+    request_id = uuid.uuid4().hex
+    event = threading.Event()
+    _INTEGRITY_PROCESS_CLOSE_REQUESTS[request_id] = {
+        "event": event,
+        "decision": False,
+    }
+
+    try:
+        eel.showIntegrityProcessCloseModal({
+            "requestId": request_id,
+            "file": file_name,
+            "processes": processes,
+        })
+    except Exception:
+        logger.warning("Не удалось показать запрос на закрытие процесса для %s", file_name, exc_info=True)
+        _INTEGRITY_PROCESS_CLOSE_REQUESTS.pop(request_id, None)
+        return False
+
+    if not event.wait(timeout=300):
+        logger.warning("Истекло время ожидания решения о закрытии процесса для %s", file_name)
+        _INTEGRITY_PROCESS_CLOSE_REQUESTS.pop(request_id, None)
+        return False
+
+    request = _INTEGRITY_PROCESS_CLOSE_REQUESTS.pop(request_id, {})
+    return bool(request.get("decision"))
+
+
+def _terminate_running_file_processes(processes: list) -> bool:
+    psutil_processes = []
+    for item in processes:
+        try:
+            psutil_processes.append(psutil.Process(int(item.get("pid"))))
+        except (TypeError, ValueError, psutil.NoSuchProcess):
+            continue
+
+    for proc in psutil_processes:
+        try:
+            proc.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+    _, alive = psutil.wait_procs(psutil_processes, timeout=5)
+    for proc in alive:
+        try:
+            proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    _, alive = psutil.wait_procs(alive, timeout=3)
+    return not alive
+
+
+def _report_integrity_progress(payload: Dict[str, Any]) -> None:
+    try:
+        eel.updateIntegrityProgress(payload)
+    except Exception:
+        logger.debug("Не удалось отправить прогресс проверки в UI", exc_info=True)
+
 @eel.expose
 def check_launcher_files_integrity():
     proxies = {"http": None, "https": None}
@@ -1408,16 +1588,20 @@ def check_launcher_files_integrity():
         "total": 0,
         "checked": 0,
         "installed": 0,
+        "updated": 0,
+        "skipped": 0,
+        "errors": 0,
         "missing_before_install": 0,
+        "outdated_before_update": 0,
         "status": "error",
-        "message": "Не удалось выполнить проверку файлов."
+        "message": "Не удалось выполнить проверку файлов.",
     }
 
     try:
         response = requests.get(
             FILE_INTEGRITY_MANIFEST_URL,
             timeout=REQUEST_TIMEOUT,
-            proxies=proxies
+            proxies=proxies,
         )
         response.raise_for_status()
         manifest = response.json()
@@ -1443,20 +1627,19 @@ def check_launcher_files_integrity():
         file_name = str(item.get("name", "")).strip()
         file_path = str(item.get("path", "")).strip()
         file_url = str(item.get("url", "")).strip()
+        remote_version = str(item.get("version", "")).strip()
 
         if not file_name or not file_path or not file_url:
             logger.warning("Пропущена некорректная запись в манифесте: %s", item)
             summary["checked"] = index
-            try:
-                eel.updateIntegrityProgress({
-                    "checked": index,
-                    "total": total,
-                    "status": "skipped",
-                    "file": file_name or "unknown",
-                    "message": "Файл пропущен: некорректная запись."
-                })
-            except Exception:
-                logger.debug("Не удалось отправить прогресс проверки в UI", exc_info=True)
+            summary["skipped"] += 1
+            _report_integrity_progress({
+                "checked": index,
+                "total": total,
+                "status": "skipped",
+                "file": file_name or "unknown",
+                "message": "Файл пропущен: некорректная запись.",
+            })
             continue
 
         target_path = Path(file_path) / file_name
@@ -1464,96 +1647,145 @@ def check_launcher_files_integrity():
         if not _is_safe_target_path(target_path):
             logger.warning("Небезопасный путь установки файла: %s", target_path)
             summary["checked"] = index
-            try:
-                eel.updateIntegrityProgress({
+            summary["skipped"] += 1
+            _report_integrity_progress({
+                "checked": index,
+                "total": total,
+                "status": "skipped",
+                "file": file_name,
+                "message": "Файл пропущен: небезопасный путь установки.",
+            })
+            continue
+
+        exists_before = target_path.exists()
+        local_version = _get_launcher_file_version(target_path) if exists_before else ""
+        needs_install = not exists_before
+        needs_update = bool(exists_before and remote_version and local_version != remote_version)
+
+        if not needs_install and not needs_update:
+            summary["checked"] = index
+            _report_integrity_progress({
+                "checked": index,
+                "total": total,
+                "status": "ok",
+                "file": file_name,
+                "version": local_version or remote_version,
+            })
+            continue
+
+        action_status = "installing" if needs_install else "updating"
+        action_message = f"Установка {file_name}..." if needs_install else (
+            f"Обновление {file_name}: {local_version or 'неизвестная'} → {remote_version}..."
+        )
+        if needs_install:
+            summary["missing_before_install"] += 1
+        else:
+            summary["outdated_before_update"] += 1
+
+        running_processes = _find_running_processes_for_file(target_path) if exists_before else []
+        if running_processes:
+            _report_integrity_progress({
+                "checked": index - 1,
+                "total": total,
+                "status": "waiting_close",
+                "file": file_name,
+                "message": f"{file_name} запущен. Ожидание решения пользователя...",
+            })
+            should_close = _ask_close_running_file_processes(file_name, running_processes)
+            if not should_close:
+                summary["checked"] = index
+                summary["skipped"] += 1
+                _report_integrity_progress({
                     "checked": index,
                     "total": total,
                     "status": "skipped",
                     "file": file_name,
-                    "message": "Файл пропущен: небезопасный путь установки."
+                    "message": f"{file_name} пропущен: файл запущен.",
                 })
-            except Exception:
-                logger.debug("Не удалось отправить прогресс проверки в UI", exc_info=True)
-            continue
-        exists_before = target_path.exists()
-        installed_now = False
-        state = "ok" if exists_before else "installing"
+                continue
 
-        if not exists_before:
-            summary["missing_before_install"] += 1
-            try:
-                eel.updateIntegrityProgress({
-                    "checked": index - 1,
+            _report_integrity_progress({
+                "checked": index - 1,
+                "total": total,
+                "status": "closing",
+                "file": file_name,
+                "message": f"Закрываем процесс {file_name}...",
+            })
+            if not _terminate_running_file_processes(running_processes):
+                summary["checked"] = index
+                summary["errors"] += 1
+                _report_integrity_progress({
+                    "checked": index,
                     "total": total,
-                    "status": "installing",
+                    "status": "error",
                     "file": file_name,
-                    "message": f"Установка {file_name}..."
+                    "message": f"Не удалось закрыть {file_name}. Файл пропущен.",
                 })
-            except Exception:
-                logger.debug("Не удалось отправить статус установки в UI", exc_info=True)
+                continue
 
-            try:
-                _download_file_to_target(file_url, target_path)
-                installed_now = True
+        _report_integrity_progress({
+            "checked": index - 1,
+            "total": total,
+            "status": action_status,
+            "file": file_name,
+            "message": action_message,
+        })
+
+        try:
+            _download_file_to_target(file_url, target_path)
+            if remote_version:
+                _save_launcher_file_version(target_path, remote_version)
+            if needs_install:
                 summary["installed"] += 1
                 state = "installed"
-            except requests.exceptions.RequestException:
-                logger.exception("Не удалось скачать файл %s", file_name)
-                state = "error"
-            except OSError:
-                logger.exception("Не удалось со��ранить файл %s", file_name)
-                state = "error"
+                result_message = f"{file_name} установлен."
+            else:
+                summary["updated"] += 1
+                state = "updated"
+                result_message = f"{file_name} обновлён до версии {remote_version}."
+        except requests.exceptions.RequestException:
+            logger.exception("Не удалось скачать файл %s", file_name)
+            summary["errors"] += 1
+            state = "error"
+            result_message = f"Не удалось скачать {file_name}."
+        except OSError:
+            logger.exception("Не удалось сохранить файл %s", file_name)
+            summary["errors"] += 1
+            state = "error"
+            result_message = f"Не удалось сохранить {file_name}."
 
         summary["checked"] = index
-        try:
-            eel.updateIntegrityProgress({
-                "checked": index,
-                "total": total,
-                "status": state,
-                "file": file_name,
-                "installed": installed_now
-            })
-        except Exception:
-            logger.debug("Не удалось отправить прогресс проверки в UI", exc_info=True)
+        _report_integrity_progress({
+            "checked": index,
+            "total": total,
+            "status": state,
+            "file": file_name,
+            "installed": state == "installed",
+            "updated": state == "updated",
+            "message": result_message,
+        })
 
-    if summary["missing_before_install"] == 0:
+    changed = summary["installed"] + summary["updated"]
+    requested = summary["missing_before_install"] + summary["outdated_before_update"]
+    if summary["errors"] == 0 and summary["skipped"] == 0:
         summary["status"] = "ok"
-        summary["message"] = "Все файлы прошли проверку."
-    elif summary["installed"] == summary["missing_before_install"]:
-        summary["status"] = "ok"
-        summary["message"] = (
-            f"Проверка завершена. Установлено {summary['installed']} из "
-            f"{summary['missing_before_install']} отсутствующих файлов."
-        )
+        if changed:
+            summary["message"] = (
+                f"Проверка завершена. Установлено: {summary['installed']}, "
+                f"обновлено: {summary['updated']}."
+            )
+        else:
+            summary["message"] = "Все файлы прошли проверку."
     else:
-        failed = summary["missing_before_install"] - summary["installed"]
-        summary["status"] = "partial"
+        summary["status"] = "partial" if changed or summary["skipped"] else "error"
         summary["message"] = (
             f"Проверка завершена частично: установлено {summary['installed']}, "
-            f"ошибок установки: {failed}."
+            f"обновлено {summary['updated']}, пропущено {summary['skipped']}, "
+            f"ошибок {summary['errors']} из {requested} требующих установки/обновления файлов."
         )
 
     return summary
 
-def _is_safe_target_path(target_path: Path) -> bool:
-    allowed_roots = [
-        Path(r"C:\.stoneworld").resolve(),
-        Path(minecraft_directory).resolve(),
-    ]
-
-    try:
-        resolved = target_path.resolve()
-    except OSError:
-        return False
-
-    for root in allowed_roots:
-        try:
-            resolved.relative_to(root)
-            return True
-        except ValueError:
-            continue
-
-    return False
 
 def _is_safe_target_path(target_path: Path) -> bool:
     allowed_roots = [

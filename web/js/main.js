@@ -75,11 +75,11 @@ function showConfirmDialog({
                 <div class="confirm-icon ${danger ? "danger" : ""}">
                     <i class="fas ${danger ? "fa-triangle-exclamation" : "fa-circle-question"}"></i>
                 </div>
-                <h3 class="confirm-title">${title}</h3>
-                <p class="confirm-message">${message}</p>
+                <h3 class="confirm-title">${escapeHtml(title)}</h3>
+                <p class="confirm-message">${escapeHtml(message)}</p>
                 <div class="confirm-actions">
-                    <button class="confirm-cancel">${cancelText}</button>
-                    <button class="confirm-ok ${danger ? "danger" : ""}">${confirmText}</button>
+                    <button class="confirm-cancel">${escapeHtml(cancelText)}</button>
+                    <button class="confirm-ok ${danger ? "danger" : ""}">${escapeHtml(confirmText)}</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
@@ -199,11 +199,22 @@ function updateIntegrityProgress(payload) {
     const fileName = payload?.file ? ` (${payload.file})` : "";
     const status = payload?.status || "ok";
 
-    if (status === "installing") {
+    if (payload?.message) {
+        progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. ${payload.message}`;
+    } else if (status === "installing") {
         if (inlineLoader) inlineLoader.style.display = "inline-flex";
         progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Установка...`;
+    } else if (status === "updating") {
+        if (inlineLoader) inlineLoader.style.display = "inline-flex";
+        progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Обновление...`;
+    } else if (status === "waiting_close") {
+        progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Ожидание закрытия процесса...`;
+    } else if (status === "closing") {
+        progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Закрытие процесса...`;
     } else if (status === "installed") {
         progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Установлено.`;
+    } else if (status === "updated") {
+        progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Обновлено.`;
     } else if (status === "error") {
         progressMessage.textContent = `${checked}/${total} файлов проверено${fileName}. Ошибка установки.`;
     } else if (status === "skipped") {
@@ -217,6 +228,53 @@ function updateIntegrityProgress(payload) {
 
 try {
     eel.expose(updateIntegrityProgress);
+} catch (e) {}
+
+async function showIntegrityProcessCloseModal(payload) {
+    const requestId = payload?.requestId || "";
+    const fileName = payload?.file || "файл";
+    const processes = Array.isArray(payload?.processes)
+        ? payload.processes
+        : [];
+    const processList = processes
+        .map((process) => `${process.name || fileName} (PID: ${process.pid})`)
+        .join(", ");
+    const suffix = processList
+        ? `
+
+Найденные процессы: ${processList}`
+        : "";
+
+    let shouldClose = false;
+    try {
+        shouldClose = await showConfirmDialog({
+            title: "Файл запущен",
+            message: `Чтобы обновить ${fileName}, нужно закрыть этот процесс.${suffix}
+
+Закрыть процесс и продолжить обновление?`,
+            confirmText: "Да, закрыть",
+            cancelText: "Нет, пропустить",
+            danger: true,
+        });
+    } catch (error) {
+        console.warn(
+            "[SLauncher] Не удалось показать окно закрытия процесса",
+            error,
+        );
+    }
+
+    try {
+        await eel.answer_integrity_process_close(requestId, shouldClose)();
+    } catch (error) {
+        console.warn(
+            "[SLauncher] Не удалось отправить решение о закрытии процесса",
+            error,
+        );
+    }
+}
+
+try {
+    eel.expose(showIntegrityProcessCloseModal);
 } catch (e) {}
 
 // ---------- Settings: memory + behavior + java args ----------
@@ -825,7 +883,10 @@ function renderServerCombo() {
 
     const servers = Array.from(serverSelect?.options || [])
         .filter((option) => option.value)
-        .map((option) => ({ value: option.value, label: option.textContent || option.value }));
+        .map((option) => ({
+            value: option.value,
+            label: option.textContent || option.value,
+        }));
 
     if (servers.length === 0) {
         box.innerHTML =
@@ -3081,10 +3142,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     function updateSavedThemeStrips() {
         savedThemesList
-            ?.querySelectorAll('.saved-theme-item[data-theme-id="__default__"] .cust-saved-strip, .cust-saved-card[data-theme-id="__default__"] .cust-saved-strip')
+            ?.querySelectorAll(
+                '.saved-theme-item[data-theme-id="__default__"] .cust-saved-strip, .cust-saved-card[data-theme-id="__default__"] .cust-saved-strip',
+            )
             .forEach((strip) => {
                 strip.innerHTML = getThemeStripStops(defaultTheme)
-                    .map((color) => `<span style="background:${escapeHtml(color)}"></span>`)
+                    .map(
+                        (color) =>
+                            `<span style="background:${escapeHtml(color)}"></span>`,
+                    )
                     .join("");
             });
     }
@@ -3187,7 +3253,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         );
         const bg = bgImageInput?.value?.trim();
         if (bg) {
-            if (isLocalBackgroundPath(bg) && !localBackgroundPreviewCache.has(bg)) {
+            if (
+                isLocalBackgroundPath(bg) &&
+                !localBackgroundPreviewCache.has(bg)
+            ) {
                 loadLocalBackgroundPreview(bg);
             }
             const previewBg = localBackgroundPreviewCache.get(bg) || bg;
@@ -3221,7 +3290,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             `data-theme-id="${escapeHtml(id)}" data-theme-bg="${escapeHtml(theme.theme_bg || "")}" data-theme-panel="${escapeHtml(theme.theme_panel || "")}" data-theme-text="${escapeHtml(theme.theme_text || "")}" data-theme-accent="${escapeHtml(theme.theme_accent || "")}" data-theme-accent2="${escapeHtml(theme.theme_accent2 || "")}"`;
         const stripForTheme = (theme) =>
             `<div class="cust-saved-strip">${getThemeStripStops(theme)
-                .map((color) => `<span style="background:${escapeHtml(color)}"></span>`)
+                .map(
+                    (color) =>
+                        `<span style="background:${escapeHtml(color)}"></span>`,
+                )
                 .join("")}</div>`;
         const currentTheme = getCurrentThemePayload();
         const rows = [
