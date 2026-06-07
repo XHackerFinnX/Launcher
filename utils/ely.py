@@ -1,6 +1,9 @@
 import logging
 from pathlib import Path
 from typing import Any, Dict
+from PIL import Image
+from base64 import b64encode
+from io import BytesIO
 
 import requests
 
@@ -194,14 +197,6 @@ def skin_face_data_uri(username: str, size: int = 128) -> str:
     safe_name = str(username or "").strip()
     if not safe_name:
         return ""
-
-    try:
-        from PIL import Image
-    except ImportError as exc:
-        raise RuntimeError("Для отображения лица Minecraft-скина установите Pillow") from exc
-
-    from base64 import b64encode
-    from io import BytesIO
 
     response = requests.get(
         skin_url(safe_name),
