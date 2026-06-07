@@ -3229,7 +3229,6 @@ html {
     max-width: 100%;
 }
 
-
 .installed-mod-chip:hover {
     border-color: var(--danger-border);
     background: var(--danger-bg-soft);
@@ -4258,7 +4257,8 @@ html {
 }
 
 .combo-avatar,
-.combo-version-icon {
+.combo-version-icon,
+.combo-server-icon {
     width: 32px;
     height: 32px;
     flex: 0 0 32px;
@@ -4272,7 +4272,8 @@ html {
     border: 1px solid var(--border-strong);
 }
 
-.combo-version-icon {
+.combo-version-icon,
+.combo-server-icon {
     background: var(--white-06);
 }
 
@@ -4294,7 +4295,8 @@ html {
     z-index: 200;
 }
 
-.version-combo-menu {
+.version-combo-menu,
+.combo-server-icon {
     width: min(310px, 90vw);
 }
 
@@ -4947,7 +4949,7 @@ html {
 }
 
 /* ----- server-select styled like launcher combos ----- */
-.bottom-panel .server-select {
+/* .bottom-panel .server-select {
     height: 48px;
     padding: 0 38px 0 14px;
     border-radius: var(--radius);
@@ -4975,4 +4977,4 @@ html {
 .bottom-panel .server-select option {
     background: var(--panel);
     color: var(--text);
-}
+} */

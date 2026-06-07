@@ -209,10 +209,14 @@
             row.firstChild?.textContent?.trim() ||
             "Тема";
 
+        const datasetKeyForColor = (key) =>
+            key
+                .replace(/^theme-/, "theme-")
+                .replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
+
         const colors = {};
         COLOR_KEYS.forEach((k) => {
-            const v =
-                row.dataset[k.replace("theme-", "theme")] || row.dataset[k];
+            const v = row.dataset[datasetKeyForColor(k)];
             if (v) colors[k] = v;
         });
         const stops = COLOR_KEYS.map(
@@ -224,6 +228,7 @@
         const legacyButtons = Array.from(row.querySelectorAll("button"));
         const card = document.createElement("div");
         card.className = "cust-saved-card";
+        if (row.dataset.themeId) card.dataset.themeId = row.dataset.themeId;
         card.innerHTML = `
             <div class="cust-saved-strip">${stops}</div>
             <div class="cust-saved-name"></div>
@@ -235,7 +240,16 @@
             const isDelete =
                 btn.classList.contains("delete-theme-btn") ||
                 /удал/i.test(btn.textContent);
-            btn.classList.add(isDelete ? "cust-delete-btn" : "cust-apply-btn");
+            const isShare =
+                btn.classList.contains("share-theme-btn") ||
+                /подел/i.test(btn.textContent);
+            btn.classList.add(
+                isDelete
+                    ? "cust-delete-btn"
+                    : isShare
+                      ? "cust-share-btn"
+                      : "cust-apply-btn",
+            );
             actions.appendChild(btn);
         });
 

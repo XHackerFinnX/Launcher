@@ -748,3 +748,43 @@
     background: #b13a3a;
     border-color: #b13a3a;
 }
+
+/* ============== LOCAL BACKGROUND / THEME IMPORT-EXPORT ============== */
+.cust-bg-input-wrap {
+    gap: 8px;
+}
+.cust-bg-input-wrap .cust-input {
+    padding-right: 112px;
+}
+.cust-inline-btn {
+    position: absolute;
+    right: 6px;
+    height: 30px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+        color var(--transition),
+        border-color var(--transition),
+        background var(--transition);
+}
+.cust-inline-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+    background: var(--panel-hover);
+}
+.cust-saved-actions .cust-share-btn {
+    color: var(--info);
+}
+.cust-saved-actions .cust-share-btn:hover {
+    color: var(--text);
+    border-color: var(--info);
+}

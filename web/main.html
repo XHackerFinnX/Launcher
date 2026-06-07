@@ -1436,7 +1436,9 @@
                                             placeholder="Название темы (например: Закат)"
                                         />
                                     </div>
-                                    <div class="cust-input-wrap">
+                                    <div
+                                        class="cust-input-wrap cust-bg-input-wrap"
+                                    >
                                         <i class="fas fa-image"></i>
                                         <input
                                             type="text"
@@ -1444,6 +1446,14 @@
                                             class="cust-input"
                                             placeholder="URL фонового изображения (необязательно)"
                                         />
+                                        <button
+                                            type="button"
+                                            id="theme-background-open-btn"
+                                            class="cust-inline-btn"
+                                        >
+                                            <i class="fas fa-folder-open"></i>
+                                            Открыть
+                                        </button>
                                     </div>
                                 </div>
                             </section>
@@ -1451,10 +1461,20 @@
                             <!-- ============== SAVED THEMES ============== -->
                             <section class="cust-section saved-themes">
                                 <div class="cust-section-head">
-                                    <h4>Сохранённые темы</h4>
-                                    <span class="cust-section-hint"
-                                        >Клик по карточке — применить</span
+                                    <div>
+                                        <h4>Сохранённые темы</h4>
+                                        <span class="cust-section-hint"
+                                            >Клик по карточке — применить</span
+                                        >
+                                    </div>
+                                    <button
+                                        type="button"
+                                        id="load-theme-btn"
+                                        class="cust-ghost-btn"
                                     >
+                                        <i class="fas fa-file-import"></i>
+                                        Загрузить тему
+                                    </button>
                                 </div>
                                 <div
                                     id="saved-themes-list"
@@ -1515,10 +1535,24 @@
             >
                 <option value="">Выберите версию</option>
             </select>
+            <div class="launcher-combo server-combo" data-combo="server" style="display: none">
+                <button class="launcher-combo-toggle" type="button">
+                    <span class="combo-server-icon"
+                        ><i class="fas fa-server"></i
+                    ></span>
+                    <span class="combo-title">Выберите сервер</span>
+                    <i class="fas fa-chevron-up combo-chevron"></i>
+                </button>
+                <div class="launcher-combo-menu server-combo-menu">
+                    <div class="combo-menu-title">
+                        <i class="fas fa-server"></i> Серверы:
+                    </div>
+                    <div class="combo-options server-combo-options"></div>
+                </div>
+            </div>
             <select
-                class="server-select"
+                class="server-select native-hidden-select"
                 id="server-select"
-                style="display: none"
                 title="Сервер"
             >
                 <option value="">Выберите сервер</option>
@@ -1759,7 +1793,13 @@
                         <!-- Описание сборки с мини-кнопкой сохранения -->
                         <div class="modpack-desc-row">
                             <div class="modpack-desc-field">
-                                <div style="display: flex;justify-content: space-between;align-items: center;">
+                                <div
+                                    style="
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: center;
+                                    "
+                                >
                                     <label for="modpack-manage-description"
                                         >Описание сборки</label
                                     >
@@ -1767,7 +1807,7 @@
                                         id="modpack-desc-save"
                                         class="modpack-desc-save-btn"
                                         title="Сохранить описание"
-                                        style="width: fit-content;"
+                                        style="width: fit-content"
                                     >
                                         <i class="fas fa-floppy-disk"></i>
                                         <span>Сохранить</span>
@@ -1782,7 +1822,7 @@
                                     placeholder="Расскажите, что входит в сборку…"
                                     maxlength="500"
                                 ></textarea>
-                            <!-- <button
+                                <!-- <button
                                 id="modpack-desc-save"
                                 class="modpack-desc-save-btn"
                                 title="Сохранить описание"
@@ -2022,9 +2062,7 @@
                 <div class="modal-body">
                     <div class="share-progress-block" id="share-progress-block">
                         <div class="share-progress-head">
-                            <span id="share-progress-stage"
-                                >Подготовка…</span
-                            >
+                            <span id="share-progress-stage">Подготовка…</span>
                             <span id="share-progress-percent">0%</span>
                         </div>
                         <div class="task-progress-track">
@@ -2089,16 +2127,17 @@
                         </div>
                     </div>
 
-                    <div class="import-summary hidden" id="import-summary"></div>
+                    <div
+                        class="import-summary hidden"
+                        id="import-summary"
+                    ></div>
 
                     <div
                         class="share-progress-block hidden"
                         id="import-progress-block"
                     >
                         <div class="share-progress-head">
-                            <span id="import-progress-stage"
-                                >Установка…</span
-                            >
+                            <span id="import-progress-stage">Установка…</span>
                             <span id="import-progress-percent">0%</span>
                         </div>
                         <div class="task-progress-track">

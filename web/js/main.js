@@ -816,6 +816,45 @@ function renderVersionCombo() {
     });
 }
 
+function renderServerCombo() {
+    const box = document.querySelector(".server-combo-options");
+    if (!box) return;
+    box.innerHTML = "";
+    const selected = serverSelect?.value || "";
+    updateComboToggle("server", selected || "Выберите сервер");
+
+    const servers = Array.from(serverSelect?.options || [])
+        .filter((option) => option.value)
+        .map((option) => ({ value: option.value, label: option.textContent || option.value }));
+
+    if (servers.length === 0) {
+        box.innerHTML =
+            '<div class="empty-state"><i class="fas fa-server"></i><div>Серверов нет</div></div>';
+        return;
+    }
+
+    servers.forEach((server) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = `combo-option ${server.value === selected ? "selected" : ""}`;
+        const icon = document.createElement("span");
+        icon.className = "combo-server-icon";
+        icon.innerHTML = '<i class="fas fa-server"></i>';
+        const main = document.createElement("span");
+        main.className = "combo-option-main";
+        main.innerHTML = `<span class="combo-option-name">${escapeHtml(server.label)}</span><span class="combo-option-subtitle">Игровой сервер</span>`;
+        option.appendChild(icon);
+        option.appendChild(main);
+        option.addEventListener("click", () => {
+            serverSelect.value = server.value;
+            serverSelect.dispatchEvent(new Event("change"));
+            closeLauncherCombos();
+            renderServerCombo();
+        });
+        box.appendChild(option);
+    });
+}
+
 document.addEventListener("DOMContentLoaded", setupLauncherCombos);
 
 function showRuntimeLogsModal() {
@@ -1199,10 +1238,15 @@ async function updateVersionSelect() {
 versionSelect.addEventListener("change", () => {
     playBtn.disabled = !versionSelect.value || isDownloading;
     renderVersionCombo();
+    if (typeof toggleServerSelect === "function") toggleServerSelect();
 });
 
 accountSelect.addEventListener("change", () => {
     renderAccountCombo();
+});
+
+serverSelect.addEventListener("change", () => {
+    renderServerCombo();
 });
 
 // ---------- Circular progress ----------
@@ -1234,6 +1278,8 @@ try {
 window.__contentInstallProgress = null;
 window.__shareProgress = null;
 window.__importProgress = null;
+window.__themeShareProgress = null;
+window.__themeImportProgress = null;
 
 function updateContentInstallProgress(percent, label) {
     if (typeof window.__contentInstallProgress === "function") {
@@ -1250,10 +1296,22 @@ function updateImportProgress(percent, stage, log) {
         window.__importProgress(percent, stage, log);
     }
 }
+function updateThemeShareProgress(percent, stage, log) {
+    if (typeof window.__themeShareProgress === "function") {
+        window.__themeShareProgress(percent, stage, log);
+    }
+}
+function updateThemeImportProgress(percent, stage, log) {
+    if (typeof window.__themeImportProgress === "function") {
+        window.__themeImportProgress(percent, stage, log);
+    }
+}
 try {
     eel.expose(updateContentInstallProgress);
     eel.expose(updateShareProgress);
     eel.expose(updateImportProgress);
+    eel.expose(updateThemeShareProgress);
+    eel.expose(updateThemeImportProgress);
 } catch (e) {}
 
 // ---------- Play button ----------
@@ -1450,9 +1508,16 @@ async function getIpAddress() {
 function toggleServerSelect() {
     const vs = document.querySelector(".version-select");
     const ss = document.querySelector(".server-select");
+    const combo = document.querySelector(".server-combo");
     if (!vs || !ss) return;
     const selected = vs.value || "";
-    ss.style.display = selected === "LunarПВП 1.8.9" ? "block" : "none";
+    const shouldShow = selected === "LunarПВП 1.8.9";
+    if (combo) {
+        combo.style.display = shouldShow ? "" : "none";
+        if (!shouldShow) combo.classList.remove("open");
+    }
+    ss.style.display = shouldShow ? "block" : "none";
+    renderServerCombo();
 }
 
 async function updateServerSelect() {
@@ -2757,8 +2822,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (el) el.addEventListener("input", () => applyThemePreview());
     });
     const bgImageInput = document.getElementById("theme-background-image");
+    const bgImageOpenBtn = document.getElementById("theme-background-open-btn");
     const themeNameInput = document.getElementById("theme-name");
     const savedThemesList = document.getElementById("saved-themes-list");
+    const loadThemeBtn = document.getElementById("load-theme-btn");
+    const localBackgroundPreviewCache = new Map();
+    const pendingLocalBackgroundReads = new Set();
     const defaultTheme = {
         theme_bg: getRootColorVar("--bg", "#0e1018"),
         theme_panel: getRootColorVar("--panel", "#161826"),
@@ -2949,6 +3018,77 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    function isRemoteOrDataBackground(value) {
+        return /^(https?:|data:)/i.test(String(value || "").trim());
+    }
+
+    function isLocalBackgroundPath(value) {
+        const trimmed = String(value || "").trim();
+        return Boolean(trimmed) && !isRemoteOrDataBackground(trimmed);
+    }
+
+    function cssUrl(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return "";
+        if (isRemoteOrDataBackground(raw) || raw.startsWith("file://")) {
+            return raw.replace(/'/g, "\\'");
+        }
+        const normalized = raw.replace(/\\/g, "/");
+        const withScheme = /^[a-z]:\//i.test(normalized)
+            ? `file:///${normalized}`
+            : normalized;
+        return withScheme.replace(/'/g, "\\'");
+    }
+
+    async function loadLocalBackgroundPreview(path) {
+        const localPath = String(path || "").trim();
+        if (
+            !isLocalBackgroundPath(localPath) ||
+            localBackgroundPreviewCache.has(localPath) ||
+            pendingLocalBackgroundReads.has(localPath)
+        ) {
+            return;
+        }
+        pendingLocalBackgroundReads.add(localPath);
+        try {
+            const res = await eel.read_theme_background_image(localPath)();
+            if (res?.ok && res.data_url) {
+                localBackgroundPreviewCache.set(localPath, res.data_url);
+                if (res.path && res.path !== localPath) {
+                    localBackgroundPreviewCache.set(res.path, res.data_url);
+                }
+                if (bgImageInput?.value?.trim() === localPath) {
+                    applyThemePreview();
+                }
+            }
+        } catch (e) {
+            // If the copied file is missing, keep the URL/file fallback so the
+            // rest of the theme still applies without interrupting startup.
+        } finally {
+            pendingLocalBackgroundReads.delete(localPath);
+        }
+    }
+
+    function getThemeStripStops(theme) {
+        return [
+            theme?.theme_bg || "#0e1018",
+            theme?.theme_panel || "#161826",
+            theme?.theme_text || "#e6e8f0",
+            theme?.theme_accent || "#ffb86c",
+            theme?.theme_accent2 || "#ff9a3c",
+        ];
+    }
+
+    function updateSavedThemeStrips() {
+        savedThemesList
+            ?.querySelectorAll('.saved-theme-item[data-theme-id="__default__"] .cust-saved-strip, .cust-saved-card[data-theme-id="__default__"] .cust-saved-strip')
+            .forEach((strip) => {
+                strip.innerHTML = getThemeStripStops(defaultTheme)
+                    .map((color) => `<span style="background:${escapeHtml(color)}"></span>`)
+                    .join("");
+            });
+    }
+
     function getCurrentThemePayload() {
         const themeJson = {};
         advancedThemeFields.forEach((f) => {
@@ -2987,8 +3127,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             theme.theme_accent || "#ffb86c";
         document.getElementById("theme-accent2").value =
             theme.theme_accent2 || "#ff9a3c";
-        if (bgImageInput)
+        if (bgImageInput) {
             bgImageInput.value = theme.theme_background_image || "";
+            if (
+                theme.theme_background_data_url &&
+                theme.theme_background_image
+            ) {
+                localBackgroundPreviewCache.set(
+                    theme.theme_background_image,
+                    theme.theme_background_data_url,
+                );
+            }
+        }
         let themeJson = {};
         try {
             themeJson = JSON.parse(theme.theme_json || "{}");
@@ -3037,10 +3187,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         );
         const bg = bgImageInput?.value?.trim();
         if (bg) {
-            document.body.style.backgroundImage = `url('${bg}')`;
+            if (isLocalBackgroundPath(bg) && !localBackgroundPreviewCache.has(bg)) {
+                loadLocalBackgroundPreview(bg);
+            }
+            const previewBg = localBackgroundPreviewCache.get(bg) || bg;
+            document.body.style.backgroundImage = `url('${cssUrl(previewBg)}')`;
         } else {
             document.body.style.backgroundImage = "";
         }
+        updateSavedThemeStrips();
         advancedThemeFields.forEach((f) => {
             const val =
                 document.getElementById(`theme-${f.key.replaceAll("_", "-")}`)
@@ -3062,11 +3217,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     function renderSavedThemes() {
         if (!savedThemesList) return;
+        const attrsForTheme = (theme, id) =>
+            `data-theme-id="${escapeHtml(id)}" data-theme-bg="${escapeHtml(theme.theme_bg || "")}" data-theme-panel="${escapeHtml(theme.theme_panel || "")}" data-theme-text="${escapeHtml(theme.theme_text || "")}" data-theme-accent="${escapeHtml(theme.theme_accent || "")}" data-theme-accent2="${escapeHtml(theme.theme_accent2 || "")}"`;
+        const stripForTheme = (theme) =>
+            `<div class="cust-saved-strip">${getThemeStripStops(theme)
+                .map((color) => `<span style="background:${escapeHtml(color)}"></span>`)
+                .join("")}</div>`;
+        const currentTheme = getCurrentThemePayload();
         const rows = [
-            `<div class="saved-theme-item"><span>Стандартная тема лаунчера</span><button class="select-theme-btn" data-theme-id="__default__">Выбрать</button></div>`,
+            `<div class="saved-theme-item" ${attrsForTheme(defaultTheme, "__default__")}><span class="saved-theme-name">Стандартная тема лаунчера</span>${stripForTheme(defaultTheme)}<button class="select-theme-btn" data-theme-id="__default__">Выбрать</button></div>`,
             ...savedThemes.map(
                 (theme) =>
-                    `<div class="saved-theme-item"><span>${theme.name}</span><div class="saved-theme-actions"><button class="select-theme-btn" data-theme-id="${theme.id}">Выбрать</button><button class="delete-theme-btn" data-theme-id="${theme.id}" title="Удалить"><i class="fas fa-trash"></i></button></div></div>`,
+                    `<div class="saved-theme-item" ${attrsForTheme(theme, theme.id)}><span class="saved-theme-name">${escapeHtml(theme.name)}</span>${stripForTheme(theme)}<div class="saved-theme-actions"><button class="select-theme-btn" data-theme-id="${escapeHtml(theme.id)}">Выбрать</button><button class="share-theme-btn" data-theme-id="${escapeHtml(theme.id)}" title="Поделиться"><i class="fas fa-share-nodes"></i></button><button class="delete-theme-btn" data-theme-id="${escapeHtml(theme.id)}" title="Удалить"><i class="fas fa-trash"></i></button></div></div>`,
             ),
         ];
         savedThemesList.innerHTML = rows.join("");
@@ -3094,6 +3256,18 @@ document.addEventListener("DOMContentLoaded", async () => {
                     });
                 });
             });
+
+        savedThemesList.querySelectorAll(".share-theme-btn").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const targetTheme = savedThemes.find(
+                    (t) => t.id === btn.dataset.themeId,
+                );
+                shareSavedTheme(
+                    btn.dataset.themeId,
+                    targetTheme?.name || "Тема",
+                );
+            });
+        });
         savedThemesList.querySelectorAll(".delete-theme-btn").forEach((btn) => {
             btn.addEventListener("click", async () => {
                 try {
@@ -3108,7 +3282,387 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    bgImageInput?.addEventListener("input", applyThemePreview);
+    function ensureThemeShareModal() {
+        let modal = document.getElementById("theme-share-modal");
+        if (modal) return modal;
+        modal = document.createElement("div");
+        modal.className = "modpack-modal hidden";
+        modal.id = "theme-share-modal";
+        modal.innerHTML = `
+            <div class="modpack-card share-card">
+                <div class="modal-header">
+                    <div class="modal-header-left">
+                        <div class="modal-icon"><i class="fas fa-share-nodes"></i></div>
+                        <div class="modal-header-text">
+                            <h3>Поделиться темой</h3>
+                            <p id="theme-share-modal-subtitle">Упаковка темы в архив</p>
+                        </div>
+                    </div>
+                    <button id="close-theme-share-modal" class="modal-close-btn"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <div class="share-progress-block" id="theme-share-progress-block">
+                        <div class="share-progress-head">
+                            <span id="theme-share-progress-stage">Подготовка…</span>
+                            <span id="theme-share-progress-percent">0%</span>
+                        </div>
+                        <div class="task-progress-track"><div class="task-progress-fill" id="theme-share-progress-fill"></div></div>
+                        <ul class="share-log" id="theme-share-log"></ul>
+                    </div>
+                    <div class="share-result hidden" id="theme-share-result">
+                        <div class="share-result-icon"><i class="fas fa-circle-check"></i></div>
+                        <p class="share-result-title">Тема готова!</p>
+                        <p class="share-result-path" id="theme-share-result-path"></p>
+                        <button class="btn-primary" id="theme-share-open-folder"><i class="fas fa-folder-open"></i> Открыть папку с архивом</button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        return modal;
+    }
+
+    function ensureThemeImportModal() {
+        let modal = document.getElementById("theme-import-modal");
+        if (modal) return modal;
+        modal = document.createElement("div");
+        modal.className = "modpack-modal hidden";
+        modal.id = "theme-import-modal";
+        modal.innerHTML = `
+            <div class="modpack-card share-card">
+                <div class="modal-header">
+                    <div class="modal-header-left">
+                        <div class="modal-icon"><i class="fas fa-file-import"></i></div>
+                        <div class="modal-header-text">
+                            <h3>Загрузить тему</h3>
+                            <p>Перенесите архив темы (.zip / .sltheme.zip)</p>
+                        </div>
+                    </div>
+                    <button id="close-theme-import-modal" class="modal-close-btn"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <div class="import-dropzone" id="theme-import-dropzone" tabindex="0">
+                        <i class="fas fa-cloud-arrow-up"></i>
+                        <p class="import-dropzone-title">Перетащите архив темы сюда</p>
+                        <p class="import-dropzone-sub">или нажмите, чтобы выбрать файл</p>
+                        <div class="import-selected hidden" id="theme-import-selected"><i class="fas fa-box-archive"></i> <span id="theme-import-selected-name"></span></div>
+                    </div>
+                    <div class="import-summary hidden" id="theme-import-summary"></div>
+                    <div class="share-progress-block hidden" id="theme-import-progress-block">
+                        <div class="share-progress-head"><span id="theme-import-progress-stage">Установка…</span><span id="theme-import-progress-percent">0%</span></div>
+                        <div class="task-progress-track"><div class="task-progress-fill" id="theme-import-progress-fill"></div></div>
+                        <ul class="share-log" id="theme-import-log"></ul>
+                    </div>
+                    <div class="modpack-footer"><button class="btn-primary" id="theme-import-install-btn" disabled><i class="fas fa-download"></i> Установить тему</button></div>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        wireThemeImportModal(modal);
+        return modal;
+    }
+
+    function appendModalLog(logEl, message) {
+        if (!logEl || !message) return;
+        const li = document.createElement("li");
+        li.textContent = message;
+        logEl.appendChild(li);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function shareSavedTheme(themeId, themeName) {
+        const modal = ensureThemeShareModal();
+        const subtitle = document.getElementById("theme-share-modal-subtitle");
+        const progressBlock = document.getElementById(
+            "theme-share-progress-block",
+        );
+        const resultBlock = document.getElementById("theme-share-result");
+        const stageEl = document.getElementById("theme-share-progress-stage");
+        const percentEl = document.getElementById(
+            "theme-share-progress-percent",
+        );
+        const fillEl = document.getElementById("theme-share-progress-fill");
+        const logEl = document.getElementById("theme-share-log");
+        const resultPath = document.getElementById("theme-share-result-path");
+        const closeBtn = document.getElementById("close-theme-share-modal");
+        const openFolderBtn = document.getElementById(
+            "theme-share-open-folder",
+        );
+        let lastPath = "";
+        const close = () => {
+            modal.classList.add("hidden");
+            window.__themeShareProgress = null;
+        };
+        closeBtn.onclick = close;
+        modal.onclick = (e) => {
+            if (e.target === modal) close();
+        };
+        openFolderBtn.onclick = async () => {
+            try {
+                await eel.open_theme_share_folder(lastPath)();
+            } catch (e) {}
+        };
+        modal.classList.remove("hidden");
+        if (subtitle) subtitle.textContent = `Упаковка темы «${themeName}»`;
+        if (progressBlock) progressBlock.classList.remove("hidden");
+        if (resultBlock) resultBlock.classList.add("hidden");
+        if (logEl) logEl.innerHTML = "";
+        const setProgress = (percent, stage, log) => {
+            const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
+            if (percentEl) percentEl.textContent = `${p}%`;
+            if (fillEl) fillEl.style.width = `${p}%`;
+            if (stage && stageEl) stageEl.textContent = stage;
+            appendModalLog(logEl, log);
+        };
+        setProgress(0, "Подготовка…");
+        window.__themeShareProgress = setProgress;
+        try {
+            const res = await eel.share_theme(themeId)();
+            window.__themeShareProgress = null;
+            if (res?.ok) {
+                lastPath = res.path || res.folder || "";
+                setProgress(100, "Готово");
+                if (resultPath) resultPath.textContent = lastPath;
+                if (progressBlock) progressBlock.classList.add("hidden");
+                if (resultBlock) resultBlock.classList.remove("hidden");
+                toast({
+                    title: "Архив темы создан",
+                    message: themeName,
+                    type: "success",
+                });
+            } else {
+                appendModalLog(logEl, `Ошибка: ${res?.error || "неизвестно"}`);
+                toast({
+                    title: "Не удалось поделиться темой",
+                    message: res?.error || "",
+                    type: "error",
+                });
+            }
+        } catch (e) {
+            window.__themeShareProgress = null;
+            appendModalLog(logEl, "Ошибка упаковки темы");
+            toast({ title: "Ошибка упаковки темы", type: "error" });
+        }
+    }
+
+    function wireThemeImportModal(modal) {
+        const closeBtn = modal.querySelector("#close-theme-import-modal");
+        const dropzone = modal.querySelector("#theme-import-dropzone");
+        const selectedBox = modal.querySelector("#theme-import-selected");
+        const selectedName = modal.querySelector("#theme-import-selected-name");
+        const summaryEl = modal.querySelector("#theme-import-summary");
+        const progressBlock = modal.querySelector(
+            "#theme-import-progress-block",
+        );
+        const stageEl = modal.querySelector("#theme-import-progress-stage");
+        const percentEl = modal.querySelector("#theme-import-progress-percent");
+        const fillEl = modal.querySelector("#theme-import-progress-fill");
+        const logEl = modal.querySelector("#theme-import-log");
+        const installBtn = modal.querySelector("#theme-import-install-btn");
+        let selectedArchivePath = "";
+        const close = () => {
+            modal.classList.add("hidden");
+            window.__themeImportProgress = null;
+        };
+        closeBtn?.addEventListener("click", close);
+        modal.addEventListener("click", (e) => {
+            if (e.target === modal) close();
+        });
+        const setProgress = (percent, stage, log) => {
+            const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
+            if (percentEl) percentEl.textContent = `${p}%`;
+            if (fillEl) fillEl.style.width = `${p}%`;
+            if (stage && stageEl) stageEl.textContent = stage;
+            appendModalLog(logEl, log);
+        };
+        const inspectArchive = async (path) => {
+            selectedArchivePath = path;
+            if (selectedBox) selectedBox.classList.remove("hidden");
+            if (selectedName)
+                selectedName.textContent = path.split(/[\\/]/).pop();
+            if (summaryEl) {
+                summaryEl.classList.remove("hidden");
+                summaryEl.innerHTML =
+                    '<i class="fas fa-spinner fa-spin"></i> Чтение архива…';
+            }
+            try {
+                const info = await eel.inspect_theme_archive(path)();
+                if (!info?.ok) {
+                    if (summaryEl)
+                        summaryEl.innerHTML = `<span class="import-error">Ошибка: ${escapeHtml(info?.error || "не удалось прочитать")}</span>`;
+                    if (installBtn) installBtn.disabled = true;
+                    return;
+                }
+                const m = info.manifest || {};
+                if (summaryEl) {
+                    summaryEl.innerHTML = `
+                        <div class="import-summary-title"><i class="fas fa-palette"></i> ${escapeHtml(m.name || "Тема")}</div>
+                        <div class="import-summary-meta">${m.has_background ? "С фоновым изображением" : "Без фонового изображения"}</div>
+                        <div class="cust-saved-strip">${getThemeStripStops(m)
+                            .map(
+                                (color) =>
+                                    `<span style="background:${escapeHtml(color)}"></span>`,
+                            )
+                            .join("")}</div>`;
+                }
+                if (installBtn) installBtn.disabled = false;
+            } catch (e) {
+                if (summaryEl)
+                    summaryEl.innerHTML =
+                        '<span class="import-error">Не удалось прочитать архив</span>';
+                if (installBtn) installBtn.disabled = true;
+            }
+        };
+        const pickArchive = async () => {
+            try {
+                const path = await eel.pick_theme_archive()();
+                if (path) inspectArchive(path);
+            } catch (e) {
+                toast({ title: "Не удалось открыть проводник", type: "error" });
+            }
+        };
+        dropzone?.addEventListener("click", pickArchive);
+        dropzone?.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                pickArchive();
+            }
+        });
+        ["dragenter", "dragover"].forEach((ev) =>
+            dropzone?.addEventListener(ev, (e) => {
+                e.preventDefault();
+                dropzone.classList.add("dragover");
+            }),
+        );
+        ["dragleave", "drop"].forEach((ev) =>
+            dropzone?.addEventListener(ev, (e) => {
+                e.preventDefault();
+                dropzone.classList.remove("dragover");
+            }),
+        );
+        dropzone?.addEventListener("drop", async (e) => {
+            const file = e.dataTransfer?.files?.[0];
+            if (!file) return;
+            if (file.path) {
+                inspectArchive(file.path);
+                return;
+            }
+            if (summaryEl) {
+                summaryEl.classList.remove("hidden");
+                summaryEl.innerHTML =
+                    '<i class="fas fa-spinner fa-spin"></i> Загрузка файла…';
+            }
+            try {
+                const buf = await file.arrayBuffer();
+                const bytes = new Uint8Array(buf);
+                let binary = "";
+                const CHUNK = 0x8000;
+                for (let i = 0; i < bytes.length; i += CHUNK) {
+                    binary += String.fromCharCode.apply(
+                        null,
+                        bytes.subarray(i, i + CHUNK),
+                    );
+                }
+                const saved = await eel.receive_theme_archive(
+                    file.name,
+                    btoa(binary),
+                )();
+                if (saved?.ok && saved.path) inspectArchive(saved.path);
+                else if (summaryEl)
+                    summaryEl.innerHTML =
+                        '<span class="import-error">Не удалось сохранить файл</span>';
+            } catch (e) {
+                if (summaryEl)
+                    summaryEl.innerHTML =
+                        '<span class="import-error">Не удалось прочитать файл</span>';
+            }
+        });
+        installBtn?.addEventListener("click", async () => {
+            if (!selectedArchivePath) return;
+            installBtn.disabled = true;
+            if (progressBlock) progressBlock.classList.remove("hidden");
+            if (logEl) logEl.innerHTML = "";
+            setProgress(0, "Подготовка…");
+            window.__themeImportProgress = setProgress;
+            try {
+                const res =
+                    await eel.install_theme_archive(selectedArchivePath)();
+                window.__themeImportProgress = null;
+                if (res?.ok) {
+                    setProgress(100, "Готово");
+                    if (res.theme) {
+                        fillThemeInputs(res.theme);
+                        applyThemePreview();
+                    }
+                    await loadSavedThemes();
+                    renderSavedThemes();
+                    toast({
+                        title: "Тема установлена",
+                        message: res.theme_name || "",
+                        type: "success",
+                    });
+                    setTimeout(close, 900);
+                } else {
+                    appendModalLog(
+                        logEl,
+                        `Ошибка: ${res?.error || "неизвестно"}`,
+                    );
+                    installBtn.disabled = false;
+                    toast({
+                        title: "Не удалось установить тему",
+                        message: res?.error || "",
+                        type: "error",
+                    });
+                }
+            } catch (e) {
+                window.__themeImportProgress = null;
+                appendModalLog(logEl, "Ошибка установки темы");
+                installBtn.disabled = false;
+                toast({ title: "Ошибка установки темы", type: "error" });
+            }
+        });
+    }
+
+    loadThemeBtn?.addEventListener("click", () => {
+        const modal = ensureThemeImportModal();
+        modal.classList.remove("hidden");
+        modal.querySelector("#theme-import-selected")?.classList.add("hidden");
+        modal.querySelector("#theme-import-summary")?.classList.add("hidden");
+        modal
+            .querySelector("#theme-import-progress-block")
+            ?.classList.add("hidden");
+        const installBtn = modal.querySelector("#theme-import-install-btn");
+        if (installBtn) installBtn.disabled = true;
+    });
+
+    bgImageInput?.addEventListener("input", () => {
+        applyThemePreview();
+    });
+    bgImageOpenBtn?.addEventListener("click", async () => {
+        try {
+            const res = await eel.pick_theme_background_image()();
+            if (!res?.ok) {
+                if (!res?.cancelled) {
+                    toast({
+                        title: "Не удалось выбрать картинку",
+                        message: res?.error || "",
+                        type: "error",
+                    });
+                }
+                return;
+            }
+            if (bgImageInput) bgImageInput.value = res.path || "";
+            if (res.path && res.data_url) {
+                localBackgroundPreviewCache.set(res.path, res.data_url);
+            }
+            applyThemePreview();
+            toast({
+                title: "Фон выбран",
+                message: "Предпросмотр обновлён",
+                type: "success",
+            });
+        } catch (e) {
+            toast({ title: "Не удалось открыть проводник", type: "error" });
+        }
+    });
     advancedThemeFields.forEach((f) =>
         document
             .getElementById(`theme-${f.key.replaceAll("_", "-")}`)
@@ -3155,6 +3709,31 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         const payload = getCurrentThemePayload();
         try {
+            if (isLocalBackgroundPath(payload.theme_background_image)) {
+                const copyRes = await eel.save_theme_background_copy(
+                    payload.theme_background_image,
+                    themeName,
+                )();
+                if (!copyRes?.ok) {
+                    toast({
+                        title: "Не удалось скопировать фон",
+                        message: copyRes?.error || "",
+                        type: "error",
+                    });
+                    return;
+                }
+                payload.theme_background_image =
+                    copyRes.path || payload.theme_background_image;
+                if (bgImageInput)
+                    bgImageInput.value = payload.theme_background_image;
+                if (copyRes.path && copyRes.data_url) {
+                    localBackgroundPreviewCache.set(
+                        copyRes.path,
+                        copyRes.data_url,
+                    );
+                }
+                applyThemePreview();
+            }
             await eel.save_named_theme({
                 name: themeName,
                 ...payload,
