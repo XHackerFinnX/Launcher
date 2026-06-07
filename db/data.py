@@ -45,7 +45,7 @@ _RELAY_CLIENT_PROXIES: Dict[str, RelayClientProxy] = {}
 
 def _get_remote_launcher_version() -> str:
     session = requests.Session()
-    session.trust_env = False  # отключает системные Proxy Windows
+    # session.trust_env = False  # отключает системные Proxy Windows
 
     try:
         response = session.get(
@@ -636,7 +636,7 @@ def _download_file_to_target(url: str, target_path: Path, progress_cb=None) -> N
     tmp_path = target_path.with_suffix(target_path.suffix + ".tmp")
 
     session = requests.Session()
-    session.trust_env = False
+    # session.trust_env = False
 
     try:
         with session.get(
@@ -1085,6 +1085,9 @@ def add_ely_account(username, password):
                 "skin_url": skin,
             },
         }
+    except ely.ElyAuthError as exc:
+        logger.warning("Ошибка авторизации Ely.by: %s", exc)
+        return {"ok": False, "error": str(exc) or "Ошибка авторизации Ely.by"}
     except Exception as exc:
         logger.exception("Ошибка авторизации Ely.by")
         return {"ok": False, "error": str(exc) or "Ошибка авторизации Ely.by"}
@@ -1117,6 +1120,9 @@ def refresh_ely_account(login):
         conn.commit()
         conn.close()
         return {"ok": True, "login": new_login, "skin_url": ely.skin_url(new_login)}
+    except ely.ElyAuthError as exc:
+        logger.warning("Не удалось обновить Ely.by токен: %s", exc)
+        return {"ok": False, "error": str(exc)}
     except Exception as exc:
         logger.exception("Не удалось обновить Ely.by токен")
         return {"ok": False, "error": str(exc)}
@@ -1622,7 +1628,7 @@ def _report_integrity_progress(payload: Dict[str, Any]) -> None:
 
 @eel.expose
 def check_launcher_files_integrity():
-    proxies = {"http": None, "https": None}
+    # proxies = {"http": None, "https": None}
     summary = {
         "total": 0,
         "checked": 0,
@@ -1640,7 +1646,7 @@ def check_launcher_files_integrity():
         response = requests.get(
             FILE_INTEGRITY_MANIFEST_URL,
             timeout=REQUEST_TIMEOUT,
-            proxies=proxies,
+            # proxies=proxies,
         )
         response.raise_for_status()
         manifest = response.json()

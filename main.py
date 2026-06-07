@@ -6,6 +6,7 @@ from db.data import start_check_version_launcher, add_version_launcher
 from utils.browser import find_browser, find_free_port
 from utils.folder import download_java, get_center_position
 from utils.logger import setup_logging
+from utils.proxy_support import ensure_socks_proxy_support
 
 from utils.download import downolad_launcher_version, minecraft_download_version, minecraft_download_version_build
 from utils.game import start_game, check_close
@@ -32,6 +33,7 @@ from db.data import (
 )
 
 def main():
+    ensure_socks_proxy_support()
     setup_logging()
     init_database(r"C:\.stoneworld\db\launcher.db")
     eel.init('web')

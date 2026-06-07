@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from PIL import Image
 from base64 import b64encode
 from io import BytesIO
@@ -17,10 +17,54 @@ REQUEST_TIMEOUT = (5, 25)
 
 logger = logging.getLogger(__name__)
 
+class ElyAuthError(RuntimeError):
+    """User-facing Ely.by authorization error."""
+
+    def __init__(self, message: str, status_code: Optional[int] = None, error: str = ""):
+        super().__init__(message)
+        self.status_code = status_code
+        self.error = error
+
+
+def _extract_error_message(data: Dict[str, Any], status_code: int) -> str:
+    raw_message = str(
+        data.get("errorMessage")
+        or data.get("error_description")
+        or data.get("message")
+        or data.get("detail")
+        or ""
+    ).strip()
+    raw_error = str(data.get("error") or "").strip()
+    normalized = (raw_message or raw_error).lower()
+
+    if "two factor" in normalized or "2fa" in normalized:
+        return "Для аккаунта Ely.by включена 2FA. Введите пароль в формате пароль:код_2FA."
+    if "invalid credentials" in normalized or "invalid email or password" in normalized:
+        return "Неверный логин/e-mail или пароль Ely.by."
+    if "token expired" in normalized:
+        return "Сессия Ely.by истекла. Войдите в аккаунт заново."
+
+    if raw_message:
+        return raw_message
+    if raw_error and raw_error not in {"ForbiddenOperationException", "IllegalArgumentException"}:
+        return raw_error
+
+    if status_code == 401:
+        return "Ely.by отклонил авторизацию. Проверьте логин/e-mail, пароль и код 2FA."
+    if status_code == 403:
+        return "Ely.by запретил выполнение операции для этого аккаунта."
+    if status_code == 404:
+        return "Сервис авторизации Ely.by не найден. Проверьте актуальность лаунчера."
+    if status_code == 429:
+        return "Слишком много запросов к Ely.by. Подождите немного и попробуйте снова."
+    if status_code >= 500:
+        return f"Сервер авторизации Ely.by временно недоступен (HTTP {status_code}). Попробуйте позже."
+
+    return f"Ely.by вернул ошибку авторизации (HTTP {status_code})."
 
 def _post_auth(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     session = requests.Session()
-    session.trust_env = False
+    # session.trust_env = False
 
     try:
         response = session.post(
@@ -36,21 +80,24 @@ def _post_auth(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             data = {}
 
         if response.status_code >= 400:
-            message = (
-                data.get("errorMessage")
-                or data.get("error")
-                or f"ely_auth_http_{response.status_code}"
+            error = str(data.get("error") or "").strip()
+            message = _extract_error_message(data, response.status_code)
+            logger.warning(
+                "Ely.by auth request failed: path=%s status=%s error=%s",
+                path,
+                response.status_code,
+                error or "unknown",
             )
-            raise RuntimeError(str(message))
+            raise ElyAuthError(message, response.status_code, error)
 
         return data
 
     except requests.exceptions.Timeout:
-        raise RuntimeError("Ely.by не отвечает. Превышено время ожидания.")
+        raise ElyAuthError("Ely.by не отвечает. Превышено время ожидания.")
     except requests.exceptions.ConnectionError:
-        raise RuntimeError("Нет соединения с Ely.by. Проверь интернет, DNS, VPN или Proxy.")
+        raise ElyAuthError("Нет соединения с Ely.by. Проверь интернет, DNS, VPN или Proxy.")
     except requests.exceptions.RequestException as exc:
-        raise RuntimeError(f"Ошибка запроса Ely.by: {exc}")
+        raise ElyAuthError(f"Ошибка запроса Ely.by: {exc}")
 
 
 def authenticate(username: str, password: str, client_token: str) -> Dict[str, Any]:
@@ -79,7 +126,7 @@ def refresh(access_token: str, client_token: str) -> Dict[str, Any]:
 
 def validate(access_token: str) -> bool:
     session = requests.Session()
-    session.trust_env = False
+    # session.trust_env = False
 
     try:
         response = session.post(
@@ -156,7 +203,7 @@ def ensure_authlib_injector() -> str:
     tmp_path = AUTHLIB_PATH.with_suffix(".jar.tmp")
 
     session = requests.Session()
-    session.trust_env = False
+    # session.trust_env = False
 
     try:
         with session.get(
