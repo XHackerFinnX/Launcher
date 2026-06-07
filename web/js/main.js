@@ -2197,55 +2197,6 @@ async function updateVersionGrid() {
                     },
                 };
                 enqueueDownloadTask(task);
-
-                try {
-                    startLauncherLogsStreaming(false);
-                    await eel.minecraft_download_version(version)();
-                    installedVersionsSet.add(version);
-                    try {
-                        await eel.insert_version(version)();
-                    } catch (e) {}
-                    updateVersionSelect();
-
-                    btn.innerHTML = '<i class="fas fa-check"></i> Установлено';
-                    btn.classList.add("installed");
-                    btn.disabled = true;
-                    const cover = btn
-                        .closest(".version-card")
-                        .querySelector(".version-card-cover");
-                    if (
-                        cover &&
-                        !cover.querySelector(".version-installed-badge")
-                    ) {
-                        const b = document.createElement("span");
-                        b.className = "version-installed-badge";
-                        b.innerHTML =
-                            '<i class="fas fa-check"></i> Установлено';
-                        cover.appendChild(b);
-                    }
-                    const settingsBtn = btn
-                        .closest(".version-card")
-                        ?.querySelector(".settings-modpack-btn");
-                    if (settingsBtn) settingsBtn.style.display = "flex";
-                    toast({
-                        title: "Загружено",
-                        message: `Minecraft ${version}`,
-                        type: "success",
-                    });
-                } catch (error) {
-                    btn.innerHTML = '<i class="fas fa-download"></i> Скачать';
-                    btn.disabled = false;
-                    showAlertVersion();
-                } finally {
-                    isDownloading = false;
-                    circularProgress.classList.remove("active");
-                    toggleDownloadButtons(false);
-                    playBtn.innerHTML = '<i class="fas fa-play"></i> Играть';
-                    playBtn.disabled = !versionSelect.value;
-                    await updateVersionList();
-                    await updateVersionFolderList();
-                    updateStats();
-                }
             },
         });
         versionsGridHome.appendChild(card);
@@ -2352,55 +2303,6 @@ async function updateVersionGrid() {
                     },
                 };
                 enqueueDownloadTask(task);
-
-                try {
-                    startLauncherLogsStreaming(false);
-                    await eel.minecraft_download_version_build(version)();
-                    installedVersionsSet.add(version);
-                    try {
-                        await eel.insert_version(version)();
-                    } catch (e) {}
-                    updateVersionSelect();
-
-                    btn.innerHTML = '<i class="fas fa-check"></i> Установлено';
-                    btn.classList.add("installed");
-                    btn.disabled = true;
-                    const cover = btn
-                        .closest(".version-card")
-                        .querySelector(".version-card-cover");
-                    if (
-                        cover &&
-                        !cover.querySelector(".version-installed-badge")
-                    ) {
-                        const b = document.createElement("span");
-                        b.className = "version-installed-badge";
-                        b.innerHTML =
-                            '<i class="fas fa-check"></i> Установлено';
-                        cover.appendChild(b);
-                    }
-                    const settingsBtn = btn
-                        .closest(".version-card")
-                        ?.querySelector(".settings-modpack-btn");
-                    if (settingsBtn) settingsBtn.style.display = "flex";
-                    toast({
-                        title: "Загружено",
-                        message: version,
-                        type: "success",
-                    });
-                } catch (error) {
-                    btn.innerHTML = '<i class="fas fa-download"></i> Скачать';
-                    btn.disabled = false;
-                    showAlertVersion();
-                } finally {
-                    isDownloading = false;
-                    circularProgress.classList.remove("active");
-                    toggleDownloadButtons(false);
-                    playBtn.innerHTML = '<i class="fas fa-play"></i> Играть';
-                    playBtn.disabled = !versionSelect.value;
-                    await updateVersionList();
-                    await updateVersionFolderList();
-                    updateStats();
-                }
             },
         });
         versionsGridBuilds.appendChild(card);

@@ -2,13 +2,14 @@ import os
 import json
 import shutil
 import subprocess
+import contextlib
 import hashlib
 import logging
 import minecraft_launcher_lib
 import eel
 import requests
 
-from utils.config import minecraft_directory, version_optifine
+from utils.config import minecraft_directory, version_optifine, CREATE_NO_WINDOW
 from db.data import delete_version_error
 from utils.folder import add_mods, add_resourcepacks
 from utils.mods_download import download_client_lunar_pvp_1_8_9, download_mods_pvp_1_8_9, download_options_pvp_1_8_9, download_resourcepacks_pvp_1_8_9
@@ -17,6 +18,62 @@ current_max = 0
 current_progress = 0
 REQUEST_TIMEOUT = (5, 60)
 logger = logging.getLogger(__name__)
+
+def _find_hidden_java_executable():
+    """Вернуть javaw.exe для фоновых установщиков Forge/Fabric на Windows."""
+    if os.name != "nt":
+        return None
+
+    candidates = []
+    for env_name in ("JAVA_HOME", "JRE_HOME"):
+        java_home = os.environ.get(env_name)
+        if java_home:
+            candidates.append(os.path.join(java_home, "bin", "javaw.exe"))
+
+    javaw_path = shutil.which("javaw")
+    if javaw_path:
+        candidates.append(javaw_path)
+
+    java_path = shutil.which("java")
+    if java_path:
+        candidates.append(os.path.join(os.path.dirname(java_path), "javaw.exe"))
+
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+
+    return None
+
+
+def _hidden_startupinfo():
+    if os.name != "nt":
+        return None
+
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return startupinfo
+
+
+@contextlib.contextmanager
+def _hidden_installer_console():
+    """Скрыть консольные окна Java-процессов, которые запускает minecraft-launcher-lib."""
+    if os.name != "nt":
+        yield
+        return
+
+    original_run = subprocess.run
+
+    def hidden_run(*popenargs, **kwargs):
+        kwargs["creationflags"] = int(kwargs.get("creationflags") or 0) | CREATE_NO_WINDOW
+        kwargs.setdefault("startupinfo", _hidden_startupinfo())
+        return original_run(*popenargs, **kwargs)
+
+    subprocess.run = hidden_run
+    try:
+        yield
+    finally:
+        subprocess.run = original_run
 
 def _resolve_forge_version(vanilla_version: str) -> str:
     version = minecraft_launcher_lib.forge.find_forge_version(vanilla_version)
@@ -125,18 +182,30 @@ callback = {
 
 @eel.expose
 def minecraft_download_version(version: str):
-    minecraft_directory_version = minecraft_directory + f"\\{version}"
-    if not os.path.exists(minecraft_directory_version):
+    minecraft_directory_version = os.path.join(minecraft_directory, version)
+    if os.path.exists(minecraft_directory_version):
+        logger.info("Minecraft версия уже установлена: %s", version)
+        return True
+
+    try:
+        logger.info("Начало установки Minecraft версии: %s", version)
+        minecraft_launcher_lib.install.install_minecraft_version(
+            version=version,
+            minecraft_directory=minecraft_directory_version,
+            callback=callback
+        )
         try:
-            logger.info("Начало установки Minecraft версии: %s", version)
-            minecraft_launcher_lib.install.install_minecraft_version(
-                version=version,
-                minecraft_directory=minecraft_directory_version,
-                callback=callback
-            )
-            logger.info("Minecraft версия установлена: %s", version)
-        except Exception as e:
-            logger.error("Ошибка в установке:", e)
+            eel.updateProgressDownload(100)
+        except Exception:
+            logger.debug("Не удалось отправить финальный прогресс в UI", exc_info=True)
+        logger.info("Minecraft версия установлена: %s", version)
+        return True
+    except Exception:
+        logger.exception("Ошибка при установке Minecraft версии %s", version)
+        if os.path.exists(minecraft_directory_version):
+            shutil.rmtree(minecraft_directory_version, ignore_errors=True)
+        delete_version_error(version)
+        raise
         
 
 @eel.expose
@@ -157,11 +226,13 @@ def minecraft_download_version_build(version_fabric_forge: str):
             if is_forge_build:
                 installed_loader = "forge"
                 version = _resolve_forge_version(version_null)
-                minecraft_launcher_lib.forge.install_forge_version(
-                    versionid=version, 
-                    path=minecraft_directory_version,
-                    callback=callback
-                )
+                with _hidden_installer_console():
+                    minecraft_launcher_lib.forge.install_forge_version(
+                        versionid=version,
+                        path=minecraft_directory_version,
+                        callback=callback,
+                        java=_find_hidden_java_executable()
+                    )
                 try:
                     installed_version_id = minecraft_launcher_lib.forge.forge_to_installed_version(version)
                 except Exception:
@@ -172,22 +243,26 @@ def minecraft_download_version_build(version_fabric_forge: str):
                 if not minecraft_launcher_lib.fabric.is_minecraft_version_supported(version_null):
                     raise RuntimeError(f"Fabric не поддерживает версию Minecraft {version_null}")
                 loader_version = minecraft_launcher_lib.fabric.get_latest_loader_version()
-                minecraft_launcher_lib.fabric.install_fabric(
-                    minecraft_version=version_null,
-                    minecraft_directory=minecraft_directory_version,
-                    loader_version=loader_version,
-                    callback=callback
-                )
+                with _hidden_installer_console():
+                    minecraft_launcher_lib.fabric.install_fabric(
+                        minecraft_version=version_null,
+                        minecraft_directory=minecraft_directory_version,
+                        loader_version=loader_version,
+                        callback=callback,
+                        java=_find_hidden_java_executable()
+                    )
                 installed_version_id = f"fabric-loader-{loader_version}-{version_null}"
             
             elif name.startswith('ПВП') or name.startswith('LunarПВП'):
                 installed_loader = "forge"
                 version = _resolve_forge_version(version_null)
-                minecraft_launcher_lib.forge.install_forge_version(
-                    versionid=version, 
-                    path=minecraft_directory_version,
-                    callback=callback
-                )
+                with _hidden_installer_console():
+                    minecraft_launcher_lib.forge.install_forge_version(
+                        versionid=version,
+                        path=minecraft_directory_version,
+                        callback=callback,
+                        java=_find_hidden_java_executable()
+                    )
                 try:
                     installed_version_id = minecraft_launcher_lib.forge.forge_to_installed_version(version)
                 except Exception:
