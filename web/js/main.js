@@ -1829,7 +1829,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!inserted) {
                 toast({
                     title: "Не удалось добавить",
-                    message: "Во��можно, такой ник уже есть",
+                    message: "Возможно, такой ник уже есть",
                     type: "error",
                 });
                 return;
@@ -4102,7 +4102,7 @@ document.addEventListener("DOMContentLoaded", () => {
         );
     });
 
-    // Мини-кнопка сохранени�� описания (режим управления).
+    // Мини-кнопка сохранения описания (режим управления).
     manageDescSave?.addEventListener("click", async () => {
         if (!currentManagedBuildId) return;
         const description = (manageDescInput?.value || "").trim();
@@ -4574,7 +4574,7 @@ document.addEventListener("DOMContentLoaded", () => {
         updatePagination();
         const token = ++searchToken;
         resultsEl.innerHTML =
-            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загр��зка...</p></div>';
+            '<div class="mod-empty"><i class="fas fa-spinner fa-spin"></i><p>Загрузка...</p></div>';
         try {
             const res = await eel.search_content(
                 contentType,
@@ -4787,7 +4787,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 await loadInstalledContent();
                 if (toInstall.length) {
                     toast({
-                        title: "��отово",
+                        title: "Готово",
                         message: `Установлено зависимостей: ${toInstall.length}`,
                         type: "success",
                     });

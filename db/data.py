@@ -401,7 +401,7 @@ def get_my_public_ip():
                     "ok": True,
                     "ip": cached_ip,
                     "cached": True,
-                    "warning": "Не удалось о����овить публичный IP, использован сохранённый."
+                    "warning": "Не удалось обновить публичный IP, использован сохранённый."
                 }
 
             return {
@@ -2031,7 +2031,7 @@ def check_version_launcher():
         return False
 
     except Exception:
-        logger.exception("Оши��ка check_version_launcher")
+        logger.exception("Ошибка check_version_launcher")
         return False
     
 def start_check_version_launcher():
