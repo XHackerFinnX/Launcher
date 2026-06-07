@@ -190,8 +190,8 @@ def minecraft_download_version(version: str):
     try:
         logger.info("Начало установки Minecraft версии: %s", version)
         minecraft_launcher_lib.install.install_minecraft_version(
-            version=version,
-            minecraft_directory=minecraft_directory_version,
+            version,
+            minecraft_directory_version,
             callback=callback
         )
         try:
@@ -271,8 +271,8 @@ def minecraft_download_version_build(version_fabric_forge: str):
                 # Чистая (ванильная) кастомная сборка без загрузчика
                 installed_loader = "vanilla"
                 minecraft_launcher_lib.install.install_minecraft_version(
-                    version=version_null,
-                    minecraft_directory=minecraft_directory_version,
+                    version_null,
+                    minecraft_directory_version,
                     callback=callback
                 )
                 installed_version_id = version_null
