@@ -127,13 +127,16 @@ callback = {
 def minecraft_download_version(version: str):
     minecraft_directory_version = minecraft_directory + f"\\{version}"
     if not os.path.exists(minecraft_directory_version):
-        logger.info("Начало установки Minecraft версии: %s", version)
-        minecraft_launcher_lib.install.install_minecraft_version(
-            version=version,
-            minecraft_directory=minecraft_directory_version,
-            callback=callback
-        )
-        logger.info("Minecraft версия установлена: %s", version)
+        try:
+            logger.info("Начало установки Minecraft версии: %s", version)
+            minecraft_launcher_lib.install.install_minecraft_version(
+                version=version,
+                minecraft_directory=minecraft_directory_version,
+                callback=callback
+            )
+            logger.info("Minecraft версия установлена: %s", version)
+        except Exception as e:
+            logger.error("Ошибка в установке:", e)
         
 
 @eel.expose
