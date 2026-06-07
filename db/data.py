@@ -36,6 +36,8 @@ FILE_INTEGRITY_MANIFEST_URL = "https://raw.githubusercontent.com/XHackerFinnX/SL
 logger = logging.getLogger(__name__)
 _log_viewer_process = None
 _INTEGRITY_PROCESS_CLOSE_REQUESTS: Dict[str, Dict[str, Any]] = {}
+INTEGRITY_PROCESS_CLOSE_TIMEOUT_SECONDS = 30
+INTEGRITY_PROCESS_CLOSE_POLL_SECONDS = 0.1
 NETWORK_CONFIG_PATH = Path(r"C:\.stoneworld\db\network.json")
 _TUNNEL_AGENTS: Dict[str, TunnelAgent] = {}
 _RELAY_UNSUPPORTED_CACHE: Dict[str, float] = {}
@@ -1521,27 +1523,63 @@ def answer_integrity_process_close(request_id, should_close):
 def cancel_integrity_process_close(request_id):
     return answer_integrity_process_close(request_id, False)
 
+@eel.expose
+def get_pending_integrity_process_close_request():
+    for request_id, request in list(_INTEGRITY_PROCESS_CLOSE_REQUESTS.items()):
+        event = request.get("event")
+        if event and event.is_set():
+            continue
+
+        payload = request.get("payload")
+        if isinstance(payload, dict):
+            return payload
+
+    return None
+
+
+def _wait_for_integrity_process_close_decision(event: threading.Event, timeout: float) -> bool:
+    """Ждать ответ UI, не блокируя websocket/event loop Eel."""
+    deadline = time.monotonic() + max(0, timeout)
+    while time.monotonic() < deadline:
+        if event.is_set():
+            return True
+        try:
+            eel.sleep(INTEGRITY_PROCESS_CLOSE_POLL_SECONDS)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception:
+            time.sleep(INTEGRITY_PROCESS_CLOSE_POLL_SECONDS)
+    return event.is_set()
 
 def _ask_close_running_file_processes(file_name: str, processes: list) -> bool:
     request_id = uuid.uuid4().hex
     event = threading.Event()
+    payload = {
+        "requestId": request_id,
+        "file": file_name,
+        "processes": processes,
+    }
     _INTEGRITY_PROCESS_CLOSE_REQUESTS[request_id] = {
         "event": event,
         "decision": False,
+        "payload": payload,
+        "created_at": time.monotonic(),
     }
 
     try:
-        eel.showIntegrityProcessCloseModal({
-            "requestId": request_id,
-            "file": file_name,
-            "processes": processes,
-        })
+        eel.showIntegrityProcessCloseModal(payload)
     except Exception:
-        logger.warning("Не удалось показать запрос на закрытие процесса для %s", file_name, exc_info=True)
-        _INTEGRITY_PROCESS_CLOSE_REQUESTS.pop(request_id, None)
-        return False
+        logger.warning(
+            "Не удалось отправить прямой запрос закрытия процесса для %s; "
+            "ожидаем резервный опрос из UI",
+            file_name,
+            exc_info=True,
+        )
 
-    if not event.wait(timeout=300):
+    if not _wait_for_integrity_process_close_decision(
+        event,
+        INTEGRITY_PROCESS_CLOSE_TIMEOUT_SECONDS,
+    ):
         logger.warning("Истекло время ожидания решения о закрытии процесса для %s", file_name)
         _INTEGRITY_PROCESS_CLOSE_REQUESTS.pop(request_id, None)
         return False
@@ -1578,6 +1616,7 @@ def _terminate_running_file_processes(processes: list) -> bool:
 def _report_integrity_progress(payload: Dict[str, Any]) -> None:
     try:
         eel.updateIntegrityProgress(payload)
+        eel.sleep(0.001)
     except Exception:
         logger.debug("Не удалось отправить прогресс проверки в UI", exc_info=True)
 

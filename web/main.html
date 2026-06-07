@@ -1681,6 +1681,46 @@
             </div>
         </div>
 
+        <div
+            id="integrity-process-close-modal"
+            class="confirm-overlay hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="integrity-process-close-title"
+        >
+            <div class="confirm-dialog integrity-process-dialog">
+                <div class="confirm-icon danger">
+                    <i class="fas fa-triangle-exclamation"></i>
+                </div>
+                <h3 class="confirm-title" id="integrity-process-close-title">
+                    Файл уже запущен
+                </h3>
+                <p class="confirm-message" id="integrity-process-close-message">
+                    Для обновления файла нужно закрыть запущенный процесс.
+                </p>
+                <ul
+                    class="integrity-process-list"
+                    id="integrity-process-close-list"
+                ></ul>
+                <div class="confirm-actions">
+                    <button
+                        class="confirm-cancel"
+                        id="integrity-process-close-skip"
+                        type="button"
+                    >
+                        Нет, пропустить
+                    </button>
+                    <button
+                        class="confirm-ok danger"
+                        id="integrity-process-close-confirm"
+                        type="button"
+                    >
+                        Да, закрыть
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div class="modpack-modal hidden" id="modpack-modal">
             <div class="modpack-card">
                 <div class="modal-header">

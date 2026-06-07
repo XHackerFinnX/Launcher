@@ -230,24 +230,51 @@ try {
     eel.expose(updateIntegrityProgress);
 } catch (e) {}
 
-async function showIntegrityProcessCloseModal(payload) {
-    const requestId = payload?.requestId || "";
+const activeIntegrityProcessCloseRequests = new Set();
+let integrityProcessClosePollTimer = null;
+
+function buildIntegrityProcessRows(processes, fileName) {
+    if (!processes.length) {
+        return `<li><i class="fas fa-file"></i><span>${escapeHtml(fileName)}</span></li>`;
+    }
+
+    return processes
+        .map((process) => {
+            const name = process?.name || fileName;
+            const pid = process?.pid ? `PID: ${process.pid}` : "PID неизвестен";
+            const exe = process?.exe ? ` — ${process.exe}` : "";
+            return `<li><i class="fas fa-microchip"></i><span>${escapeHtml(name)} (${escapeHtml(pid)})${escapeHtml(exe)}</span></li>`;
+        })
+        .join("");
+}
+
+function showIntegrityProcessCloseDialog(payload) {
+    const modal = document.getElementById("integrity-process-close-modal");
+    const messageEl = document.getElementById(
+        "integrity-process-close-message",
+    );
+    const listEl = document.getElementById("integrity-process-close-list");
+    const confirmBtn = document.getElementById(
+        "integrity-process-close-confirm",
+    );
+    const skipBtn = document.getElementById("integrity-process-close-skip");
     const fileName = payload?.file || "файл";
     const processes = Array.isArray(payload?.processes)
         ? payload.processes
         : [];
-    const processList = processes
-        .map((process) => `${process.name || fileName} (PID: ${process.pid})`)
-        .join(", ");
-    const suffix = processList
-        ? `
+    if (!modal || !messageEl || !listEl || !confirmBtn || !skipBtn) {
+        const processList = processes
+            .map(
+                (process) =>
+                    `${process.name || fileName} (PID: ${process.pid})`,
+            )
+            .join(", ");
+        const suffix = processList
+            ? `
 
-Найденные процессы: ${processList}`
-        : "";
-
-    let shouldClose = false;
-    try {
-        shouldClose = await showConfirmDialog({
+    Найденные процессы: ${processList}`
+            : "";
+        return showConfirmDialog({
             title: "Файл запущен",
             message: `Чтобы обновить ${fileName}, нужно закрыть этот процесс.${suffix}
 
@@ -256,13 +283,44 @@ async function showIntegrityProcessCloseModal(payload) {
             cancelText: "Нет, пропустить",
             danger: true,
         });
-    } catch (error) {
-        console.warn(
-            "[SLauncher] Не удалось показать окно закрытия процесса",
-            error,
-        );
     }
 
+    messageEl.textContent = `Чтобы обновить ${fileName}, нужно закрыть найденный запущенный процесс. Закрыть процесс и продолжить проверку?`;
+    listEl.innerHTML = buildIntegrityProcessRows(processes, fileName);
+
+    return new Promise((resolve) => {
+        const cleanup = () => {
+            confirmBtn.removeEventListener("click", onConfirm);
+            skipBtn.removeEventListener("click", onSkip);
+            modal.removeEventListener("click", onOverlayClick);
+            document.removeEventListener("keydown", onKeyDown);
+        };
+        const close = (result) => {
+            cleanup();
+            modal.classList.remove("visible");
+            setTimeout(() => modal.classList.add("hidden"), 200);
+            resolve(result);
+        };
+        const onConfirm = () => close(true);
+        const onSkip = () => close(false);
+        const onOverlayClick = (event) => {
+            if (event.target === modal) close(false);
+        };
+        const onKeyDown = (event) => {
+            if (event.key === "Escape") close(false);
+        };
+
+        confirmBtn.addEventListener("click", onConfirm);
+        skipBtn.addEventListener("click", onSkip);
+        modal.addEventListener("click", onOverlayClick);
+        document.addEventListener("keydown", onKeyDown);
+
+        modal.classList.remove("hidden");
+        requestAnimationFrame(() => modal.classList.add("visible"));
+    });
+}
+
+async function sendIntegrityProcessCloseAnswer(requestId, shouldClose) {
     try {
         await eel.answer_integrity_process_close(requestId, shouldClose)();
     } catch (error) {
@@ -271,6 +329,53 @@ async function showIntegrityProcessCloseModal(payload) {
             error,
         );
     }
+}
+
+async function showIntegrityProcessCloseModal(payload) {
+    const requestId = payload?.requestId || "";
+    if (!requestId || activeIntegrityProcessCloseRequests.has(requestId))
+        return;
+
+    activeIntegrityProcessCloseRequests.add(requestId);
+    let shouldClose = false;
+    try {
+        shouldClose = await showIntegrityProcessCloseDialog(payload);
+    } catch (error) {
+        console.warn(
+            "[SLauncher] Не удалось показать окно закрытия процесса",
+            error,
+        );
+    } finally {
+        await sendIntegrityProcessCloseAnswer(requestId, shouldClose);
+        activeIntegrityProcessCloseRequests.delete(requestId);
+    }
+}
+async function pollPendingIntegrityProcessCloseRequest() {
+    try {
+        const payload =
+            await eel.get_pending_integrity_process_close_request()();
+        if (payload?.requestId) showIntegrityProcessCloseModal(payload);
+    } catch (error) {
+        console.warn(
+            "[SLauncher] Не удалось проверить ожидающий запрос закрытия процесса",
+            error,
+        );
+    }
+}
+
+function startIntegrityProcessClosePolling() {
+    if (integrityProcessClosePollTimer) return;
+    pollPendingIntegrityProcessCloseRequest();
+    integrityProcessClosePollTimer = setInterval(
+        pollPendingIntegrityProcessCloseRequest,
+        500,
+    );
+}
+
+function stopIntegrityProcessClosePolling() {
+    if (!integrityProcessClosePollTimer) return;
+    clearInterval(integrityProcessClosePollTimer);
+    integrityProcessClosePollTimer = null;
 }
 
 try {
@@ -505,6 +610,8 @@ document.addEventListener("DOMContentLoaded", async function () {
                 integrityResultMessage.textContent = "";
             }
 
+            startIntegrityProcessClosePolling();
+
             try {
                 const result = await eel.check_launcher_files_integrity()();
                 if (integrityInlineLoader)
@@ -544,6 +651,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                     type: "error",
                 });
             } finally {
+                stopIntegrityProcessClosePolling();
                 checkIntegrityBtn.disabled = false;
             }
         });
