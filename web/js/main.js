@@ -796,6 +796,298 @@ function escapeHtml(value) {
         .replace(/'/g, "&#039;");
 }
 
+// ---------- Feedback form ----------
+const FEEDBACK_ENDPOINT = "https://2p2p.ru/api/launcher_feedback";
+const FEEDBACK_MAX_FILES = 5;
+const FEEDBACK_MAX_FILE_SIZE = 5 * 1024 * 1024;
+const FEEDBACK_ALLOWED_TYPES = new Set([
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+]);
+let feedbackFiles = [];
+
+function formatBytes(bytes) {
+    if (!Number.isFinite(bytes)) return "0 Б";
+    if (bytes < 1024 * 1024)
+        return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+}
+
+function setFeedbackStatus(message = "", type = "") {
+    const status = document.getElementById("feedback-status");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.remove("success", "error");
+    if (type) status.classList.add(type);
+}
+
+function renderFeedbackPreviews() {
+    const previews = document.getElementById("feedback-previews");
+    const count = document.getElementById("feedback-images-count");
+    if (count)
+        count.textContent = `${feedbackFiles.length}/${FEEDBACK_MAX_FILES}`;
+    if (!previews) return;
+
+    previews.innerHTML = feedbackFiles
+        .map(
+            (file, index) => `
+            <div class="feedback-preview">
+                <img src="${file.previewUrl}" alt="${escapeHtml(file.name)}" />
+                <button class="feedback-preview-remove" type="button" data-feedback-remove="${index}" title="Удалить изображение">
+                    <i class="fas fa-xmark"></i>
+                </button>
+                <div class="feedback-preview-meta" title="${escapeHtml(file.name)}">
+                    ${escapeHtml(file.name)} · ${formatBytes(file.size)}
+                </div>
+            </div>`,
+        )
+        .join("");
+
+    previews.querySelectorAll("[data-feedback-remove]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const index = Number.parseInt(button.dataset.feedbackRemove, 10);
+            const [removed] = feedbackFiles.splice(index, 1);
+            if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+            renderFeedbackPreviews();
+        });
+    });
+}
+
+function addFeedbackFiles(files) {
+    const incoming = Array.from(files || []);
+    for (const file of incoming) {
+        if (feedbackFiles.length >= FEEDBACK_MAX_FILES) {
+            toast({
+                title: "Слишком много изображений",
+                message: `Можно прикрепить не больше ${FEEDBACK_MAX_FILES} файлов.`,
+                type: "error",
+            });
+            break;
+        }
+        if (!FEEDBACK_ALLOWED_TYPES.has(file.type)) {
+            toast({
+                title: "Неподдерживаемый формат",
+                message: "Принимаются только PNG, JPG, JPEG и WEBP.",
+                type: "error",
+            });
+            continue;
+        }
+        if (file.size > FEEDBACK_MAX_FILE_SIZE) {
+            toast({
+                title: "Файл слишком большой",
+                message: `${file.name}: максимум 5 МБ на файл.`,
+                type: "error",
+            });
+            continue;
+        }
+        feedbackFiles.push({
+            file,
+            name: file.name,
+            size: file.size,
+            previewUrl: URL.createObjectURL(file),
+        });
+    }
+    renderFeedbackPreviews();
+}
+
+function getOrCreateLocalFeedbackSystemId() {
+    const key = "slauncher_feedback_system_id";
+    try {
+        const existing = localStorage.getItem(key);
+        if (existing) return existing;
+        const generated = crypto?.randomUUID
+            ? crypto.randomUUID().replaceAll("-", "")
+            : `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        localStorage.setItem(key, generated);
+        return generated;
+    } catch (_) {
+        return `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+}
+
+async function getFeedbackSystemId() {
+    if (!window.eel?.get_launcher_feedback_system_id) {
+        return getOrCreateLocalFeedbackSystemId();
+    }
+
+    try {
+        const systemId = await eel.get_launcher_feedback_system_id()();
+        return systemId || getOrCreateLocalFeedbackSystemId();
+    } catch (error) {
+        console.warn("[SLauncher] Не удалось получить ID системы", error);
+        return getOrCreateLocalFeedbackSystemId();
+    }
+}
+
+async function getFeedbackTechnicalInfo() {
+    const systemId = await getFeedbackSystemId();
+    const launcherVersion =
+        document
+            .getElementById("launcher-version-label")
+            ?.textContent?.trim() || "";
+    const selectedVersion =
+        document.querySelector(".version-select")?.value || "";
+    const memoryMb =
+        document.getElementById("memory-value")?.textContent?.trim() || "";
+    const browserInfo = {
+        system_id: systemId,
+        user_agent: navigator.userAgent,
+        language: navigator.language,
+        screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
+        launcher_version_label: launcherVersion,
+        selected_minecraft_version: selectedVersion,
+        memory_mb: memoryMb,
+    };
+
+    if (!window.eel?.get_launcher_feedback_technical_info) {
+        return browserInfo;
+    }
+
+    try {
+        const pythonInfo = await eel.get_launcher_feedback_technical_info()();
+        return { ...browserInfo, ...(pythonInfo || {}) };
+    } catch (error) {
+        console.warn(
+            "[SLauncher] Не удалось собрать техническую информацию",
+            error,
+        );
+        return browserInfo;
+    }
+}
+
+function resetFeedbackForm(form) {
+    form.reset();
+    feedbackFiles.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    feedbackFiles = [];
+    renderFeedbackPreviews();
+    const counter = document.getElementById("feedback-description-count");
+    if (counter) counter.textContent = "0";
+    const includeTech = document.getElementById("feedback-include-tech");
+    if (includeTech) includeTech.checked = true;
+}
+
+function initFeedbackForm() {
+    const form = document.getElementById("feedback-form");
+    if (!form) return;
+
+    const fileInput = document.getElementById("feedback-images");
+    const description = document.getElementById("feedback-description");
+    const submitButton = document.getElementById("feedback-submit");
+
+    description?.addEventListener("input", () => {
+        const counter = document.getElementById("feedback-description-count");
+        if (counter) counter.textContent = String(description.value.length);
+    });
+
+    fileInput?.addEventListener("change", (event) => {
+        addFeedbackFiles(event.target.files);
+        fileInput.value = "";
+    });
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        setFeedbackStatus("", "");
+
+        const subject =
+            document.getElementById("feedback-subject")?.value.trim() || "";
+        const descriptionValue = description?.value.trim() || "";
+        if (subject.length < 3) {
+            setFeedbackStatus(
+                "Тема должна быть не короче 3 символов.",
+                "error",
+            );
+            return;
+        }
+        if (descriptionValue.length < 10) {
+            setFeedbackStatus(
+                "Описание должно быть не короче 10 символов.",
+                "error",
+            );
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append(
+            "category",
+            document.getElementById("feedback-category")?.value || "Другое",
+        );
+        formData.append("subject", subject);
+        formData.append("description", descriptionValue);
+        formData.append(
+            "contact",
+            document.getElementById("feedback-contact")?.value.trim() || "",
+        );
+
+        const includeTech = Boolean(
+            document.getElementById("feedback-include-tech")?.checked,
+        );
+        const systemId = await getFeedbackSystemId();
+        formData.append("system_id", systemId);
+        formData.append(
+            "include_technical_info",
+            includeTech ? "true" : "false",
+        );
+        if (includeTech) {
+            const technicalInfo = await getFeedbackTechnicalInfo();
+            technicalInfo.system_id = technicalInfo.system_id || systemId;
+            formData.append("technical_info", JSON.stringify(technicalInfo));
+        }
+        feedbackFiles.forEach((item) =>
+            formData.append("images", item.file, item.name),
+        );
+
+        submitButton.disabled = true;
+        submitButton.innerHTML =
+            '<i class="fas fa-spinner fa-spin"></i> Отправляем…';
+        setFeedbackStatus("Отправляем обращение…");
+
+        try {
+            const response = await fetch(FEEDBACK_ENDPOINT, {
+                method: "POST",
+                body: formData,
+                cache: "no-cache",
+            });
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (_) {
+                data = {};
+            }
+            if (!response.ok || data.ok === false) {
+                throw new Error(
+                    data.message || data.detail || `HTTP ${response.status}`,
+                );
+            }
+            setFeedbackStatus("Обращение отправлено. Спасибо!", "success");
+            toast({
+                title: "Обращение отправлено",
+                message: data.feedback_id
+                    ? `Номер обращения: ${data.feedback_id}`
+                    : "Мы получили ваш отзыв.",
+                type: "success",
+            });
+            resetFeedbackForm(form);
+        } catch (error) {
+            console.error("[SLauncher] Ошибка отправки обращения", error);
+            setFeedbackStatus("Ошибка отправки, попробуйте позже.", "error");
+            toast({
+                title: "Не удалось отправить обращение",
+                message: error.message || "Проверьте подключение к интернету.",
+                type: "error",
+            });
+        } finally {
+            submitButton.disabled = false;
+            submitButton.innerHTML =
+                '<i class="fas fa-paper-plane"></i> Отправить обращение';
+        }
+    });
+
+    renderFeedbackPreviews();
+}
+
+initFeedbackForm();
+
 function accountName(account) {
     return account?.login || account?.[1] || "";
 }

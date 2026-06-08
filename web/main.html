@@ -117,6 +117,11 @@
                     <span>Настройки</span>
                 </div>
 
+                <div class="menu-item" data-section="feedback">
+                    <i class="fas fa-headset"></i>
+                    <span>Помощь и отзывы</span>
+                </div>
+
                 <div class="playtime">
                     <div class="playtime-row">
                         <div class="playtime-icon">
@@ -1487,6 +1492,203 @@
                         class="settings-container hidden"
                         data-settings-pane="launcher"
                     ></div>
+                </section>
+
+                <!-- ===== FEEDBACK ===== -->
+                <section class="content-section" id="feedback">
+                    <div class="page-header feedback-header">
+                        <div class="page-header-text">
+                            <h2 class="page-title">Помощь и отзывы</h2>
+                            <p class="page-subtitle">
+                                Сообщите об ошибке, задайте вопрос или
+                                предложите улучшение для SLauncher.
+                            </p>
+                        </div>
+                        <div class="feedback-header-badge">
+                            <i class="fas fa-shield-heart"></i>
+                            Помоги сделать SLauncher лучше
+                        </div>
+                    </div>
+
+                    <div class="feedback-layout">
+                        <form class="feedback-card" id="feedback-form">
+                            <div class="feedback-grid-two">
+                                <div class="feedback-field">
+                                    <label
+                                        class="form-label"
+                                        for="feedback-category"
+                                        >Категория обращения</label
+                                    >
+                                    <select
+                                        id="feedback-category"
+                                        class="feedback-input"
+                                        name="category"
+                                        required
+                                    >
+                                        <option value="Ошибка">Ошибка</option>
+                                        <option value="Предложение">
+                                            Предложение
+                                        </option>
+                                        <option value="Вопрос">Вопрос</option>
+                                        <option value="Проблема с аккаунтом">
+                                            Проблема с аккаунтом
+                                        </option>
+                                        <option value="Проблема со сборкой">
+                                            Проблема со сборкой
+                                        </option>
+                                        <option value="Другое">Другое</option>
+                                    </select>
+                                </div>
+                                <div class="feedback-field">
+                                    <label
+                                        class="form-label"
+                                        for="feedback-contact"
+                                        >Контакт для ответа</label
+                                    >
+                                    <input
+                                        id="feedback-contact"
+                                        class="feedback-input"
+                                        name="contact"
+                                        type="text"
+                                        maxlength="120"
+                                        placeholder="Discord, Telegram или email (необязательно)"
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="feedback-field">
+                                <label class="form-label" for="feedback-subject"
+                                    >Тема обращения</label
+                                >
+                                <input
+                                    id="feedback-subject"
+                                    class="feedback-input"
+                                    name="subject"
+                                    type="text"
+                                    minlength="3"
+                                    maxlength="120"
+                                    required
+                                    placeholder="Например: Ошибка запуска Minecraft 1.20.1"
+                                />
+                                <p class="input-helper">
+                                    Коротко опишите суть обращения — от 3 до 120
+                                    символов.
+                                </p>
+                            </div>
+
+                            <div class="feedback-field">
+                                <label
+                                    class="form-label"
+                                    for="feedback-description"
+                                    >Описание обращения</label
+                                >
+                                <textarea
+                                    id="feedback-description"
+                                    class="feedback-input feedback-textarea"
+                                    name="description"
+                                    minlength="10"
+                                    maxlength="5000"
+                                    required
+                                    placeholder="Опишите, что произошло, какие действия вы выполняли и что ожидали увидеть."
+                                ></textarea>
+                                <div class="feedback-counter">
+                                    <span id="feedback-description-count"
+                                        >0</span
+                                    >/5000
+                                </div>
+                            </div>
+
+                            <div class="feedback-field">
+                                <div class="feedback-upload-head">
+                                    <label
+                                        class="form-label"
+                                        for="feedback-images"
+                                        >Прикрепить изображения</label
+                                    >
+                                    <span id="feedback-images-count">0/5</span>
+                                </div>
+                                <label
+                                    class="feedback-dropzone"
+                                    for="feedback-images"
+                                >
+                                    <i class="fas fa-images"></i>
+                                    <span
+                                        >Выберите скриншоты или фотографии</span
+                                    >
+                                    <small
+                                        >PNG, JPG, JPEG, WEBP — до 5 МБ на
+                                        файл</small
+                                    >
+                                </label>
+                                <input
+                                    id="feedback-images"
+                                    class="feedback-file-input"
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp"
+                                    multiple
+                                />
+                                <div
+                                    class="feedback-previews"
+                                    id="feedback-previews"
+                                ></div>
+                            </div>
+
+                            <label class="feedback-tech-toggle">
+                                <input
+                                    id="feedback-include-tech"
+                                    type="checkbox"
+                                    checked
+                                />
+                                <span class="feedback-checkmark"
+                                    ><i class="fas fa-check"></i
+                                ></span>
+                                <span>
+                                    <strong
+                                        >Приложить техническую
+                                        информацию</strong
+                                    >
+                                    <small
+                                        >Версия лаунчера, ОС, Java, выбранная
+                                        версия Minecraft и последние строки
+                                        лога. Пароли и токены не
+                                        отправляются.</small
+                                    >
+                                </span>
+                            </label>
+
+                            <div class="feedback-actions">
+                                <button
+                                    class="btn-primary"
+                                    id="feedback-submit"
+                                    type="submit"
+                                >
+                                    <i class="fas fa-paper-plane"></i>
+                                    Отправить обращение
+                                </button>
+                                <span
+                                    class="feedback-status"
+                                    id="feedback-status"
+                                ></span>
+                            </div>
+                        </form>
+
+                        <aside class="feedback-info-card">
+                            <div class="feedback-info-icon">
+                                <i class="fas fa-lightbulb"></i>
+                            </div>
+                            <h3>Что лучше указать?</h3>
+                            <ul>
+                                <li>Что вы нажали перед ошибкой.</li>
+                                <li>Версию Minecraft или сборку.</li>
+                                <li>Текст ошибки или скриншот.</li>
+                                <li>Контакт, если нужен ответ.</li>
+                            </ul>
+                            <div class="feedback-info-note">
+                                Обращение отправится на сервер 2p2p.ru и
+                                появится в закрытой админке обратной связи.
+                            </div>
+                        </aside>
+                    </div>
                 </section>
             </main>
         </div>

@@ -7,7 +7,10 @@ from utils.browser import find_browser, find_free_port
 from utils.folder import download_java, get_center_position
 from utils.logger import setup_logging
 from utils.proxy_support import ensure_socks_proxy_support
-
+from utils.feedback_info import (
+    get_launcher_feedback_system_id,
+    get_launcher_feedback_technical_info,
+)
 from utils.download import downolad_launcher_version, minecraft_download_version, minecraft_download_version_build
 from utils.game import start_game, check_close
 from utils.folder import open_folder_version
