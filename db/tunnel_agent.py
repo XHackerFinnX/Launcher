@@ -3,7 +3,7 @@ import logging
 import socket
 import threading
 import time
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import requests
 
@@ -13,22 +13,30 @@ logger = logging.getLogger(__name__)
 class TunnelAgent:
     """TCP tunnel agent that bridges relay socket <-> local minecraft socket."""
 
-    def __init__(self, relay_host: str, relay_port: int, agent_token: str, minecraft_port: int, room_id: str):
+    def __init__(self, relay_host: str, relay_port: int, agent_token: str, minecraft_port: int, room_id: str, workers: int = 4):
         self.relay_host = relay_host
         self.relay_port = int(relay_port)
         self.agent_token = agent_token
         self.minecraft_port = int(minecraft_port)
         self.room_id = room_id
+        self.workers = max(1, int(workers or 1))
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-        self._state: Dict[str, str] = {"status": "idle", "error": ""}
+        self._threads: List[threading.Thread] = []
+        self._state: Dict[str, str] = {"status": "idle", "error": "", "workers": str(self.workers)}
 
     def start(self):
-        if self._thread and self._thread.is_alive():
+        if any(t.is_alive() for t in self._threads):
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._run, daemon=True, name=f"tunnel-agent-{self.room_id}")
-        self._thread.start()
+        self._threads = []
+        for index in range(self.workers):
+            thread = threading.Thread(
+                target=self._run,
+                daemon=True,
+                name=f"tunnel-agent-{self.room_id}-{index + 1}",
+            )
+            thread.start()
+            self._threads.append(thread)
 
     def stop(self):
         self._stop.set()
@@ -106,26 +114,87 @@ class RelayClientProxy:
         self.local_port = int(local_port)
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._server: Optional[socket.socket] = None
+        self._state: Dict[str, str] = {"status": "idle", "error": ""}
 
     def start(self):
-        self._thread = threading.Thread(target=self._run, daemon=True)
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(
+            target=self._run,
+            daemon=True,
+            name=f"relay-client-proxy-{self.room_id}",
+        )
         self._thread.start()
 
     def stop(self):
         self._stop.set()
-
-    def _run(self):
-        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("127.0.0.1", self.local_port))
-        srv.listen(10)
-        srv.settimeout(1.0)
-        while not self._stop.is_set():
+        self._state["status"] = "stopped"
+        if self._server:
             try:
-                client, _ = srv.accept()
+                self._server.close()
             except OSError:
-                continue
+                pass
+            
+    def status(self):
+        return dict(self._state)
+
+    def _handle_client(self, client: socket.socket):
+        relay = None
+        try:
+            self._state["status"] = "connecting_relay"
             relay = socket.create_connection((self.relay_host, self.relay_port), timeout=10)
             hello = {"type": "client", "room_id": self.room_id, "join_token": self.join_token}
             relay.sendall((json.dumps(hello) + "\n").encode("utf-8"))
+            self._state["status"] = "client_connected"
             TunnelAgent._pump(self, client, relay)
+        except OSError as exc:
+            self._state["status"] = "relay_error"
+            self._state["error"] = str(exc)
+            logger.warning("Relay client proxy failed: %s", exc)
+        finally:
+            for s in (client, relay):
+                if s:
+                    try:
+                        s.close()
+                    except OSError:
+                        pass
+
+    def _run(self):
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._server = srv
+        try:
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            srv.bind(("127.0.0.1", self.local_port))
+            srv.listen(10)
+            srv.settimeout(1.0)
+            self._state["status"] = "listening"
+            self._state["address"] = f"127.0.0.1:{self.local_port}"
+
+            while not self._stop.is_set():
+                try:
+                    client, _ = srv.accept()
+                except socket.timeout:
+                    continue
+                except OSError:
+                    if not self._stop.is_set():
+                        self._state["status"] = "listen_error"
+                    break
+
+                threading.Thread(
+                    target=self._handle_client,
+                    args=(client,),
+                    daemon=True,
+                    name=f"relay-client-{self.room_id}",
+                ).start()
+        except OSError as exc:
+            self._state["status"] = "listen_error"
+            self._state["error"] = str(exc)
+            logger.warning("Relay client proxy listen failed: %s", exc)
+        finally:
+            try:
+                srv.close()
+            except OSError:
+                pass
+            self._server = None

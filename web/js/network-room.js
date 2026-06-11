@@ -113,6 +113,7 @@
         joined: false,
         autoRefreshTimer: null,
         preferLanRoute: false,
+        relayLocalAddress: "",
     };
 
     /* ------------------------------------------------------------------ */
@@ -619,9 +620,79 @@
         }
         setStatus(
             status,
-            `Relay запущен: ${res?.relay?.host || ""}:${res?.relay?.port || ""}`,
+            `Relay хоста запущен: ${res?.relay?.host || ""}:${res?.relay?.port || ""}. Друг теперь жмёт «Подключить relay (игрок)».`,
             "success",
         );
+        safeToast({
+            title: "Relay",
+            message: "Хост-туннель запущен",
+            type: "success",
+        });
+    }
+
+    async function startRelayClient() {
+        const status = $("network-status");
+        if (!state.currentRoomId) {
+            setStatus(
+                status,
+                "Сначала подключись к комнате",
+                "error",
+            );
+            return;
+        }
+        setStatus(status, "Запускаем локальный relay proxy для игрока...", "working");
+        const res = await eelCall(
+            "start_relay_client_proxy",
+            state.currentRoomId,
+            25595,
+        );
+        if (!res?.ok) {
+            setStatus(
+                status,
+                `Не удалось подключить relay: ${res?.error === "relay_not_supported" ? "backend не поддерживает relay/session/join" : res?.hint || res?.error || "unknown"}`,
+                "error",
+            );
+            return;
+        }
+        state.relayLocalAddress = res.endpoint?.address || "127.0.0.1:25595";
+        setStatus(
+            status,
+            `Relay игрока готов. В Minecraft открой «Прямое подключение» и введи ${state.relayLocalAddress}`,
+            "success",
+        );
+        safeToast({
+            title: "Relay",
+            message: `Подключайся к ${state.relayLocalAddress}`,
+            type: "success",
+        });
+    }
+
+    async function stopRelayClient() {
+        const status = $("network-status");
+        const res = await eelCall(
+            "stop_relay_client_proxy",
+            state.currentRoomId || "",
+        );
+        if (!res?.ok) {
+            setStatus(
+                status,
+                `Ошибка остановки relay игрока: ${res?.error || "unknown"}`,
+                "error",
+            );
+            return;
+        }
+        state.relayLocalAddress = "";
+        setStatus(status, "Relay игрока остановлен", "working");
+    }
+
+    async function copyRelayLocalAddress() {
+        const text = state.relayLocalAddress || "127.0.0.1:25595";
+        const ok = await copyToClipboard(text);
+        safeToast({
+            title: "Relay",
+            message: ok ? `Скопировано: ${text}` : "Не удалось скопировать",
+            type: ok ? "success" : "error",
+        });
     }
 
     async function stopRelayHost() {
@@ -638,7 +709,7 @@
             );
             return;
         }
-        setStatus(status, "Relay остановлен", "working");
+        setStatus(status, "Relay хоста остановлен", "working");
     }
 
     function startAutoRefresh() {
@@ -666,6 +737,9 @@
         $("network-connect-btn")?.addEventListener("click", testConnection);
         $("network-auto-btn")?.addEventListener("click", autoRoute);
         $("network-relay-start-btn")?.addEventListener("click", startRelayHost);
+        $("network-relay-client-btn")?.addEventListener("click", startRelayClient);
+        $("network-relay-copy-btn")?.addEventListener("click", copyRelayLocalAddress);
+        $("network-relay-stop-client-btn")?.addEventListener("click", stopRelayClient);
         $("network-relay-stop-btn")?.addEventListener("click", stopRelayHost);
         $("net-check-port")?.addEventListener("click", checkExternalPort);
         $("net-publish-port")?.addEventListener("click", publishPort);

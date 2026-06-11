@@ -432,9 +432,9 @@
                                     Сетевая комната
                                 </h3>
                                 <p class="net-subtitle">
-                                    Видишь ник, пинг и IP каждого участника,
-                                    копируешь IP:порт хоста и заходишь в его
-                                    LAN-мир в Minecraft.
+                                    Создаёшь комнату, запускаешь relay-туннель и
+                                    играешь с другом даже без открытых портов на
+                                    роутере.
                                 </p>
                             </div>
                             <div
@@ -459,8 +459,8 @@
                                     <div>
                                         <h4>Создать комнату</h4>
                                         <p>
-                                            Ты будешь хостом — твой IP узнают
-                                            участники
+                                            Ты будешь хостом комнаты — после этого
+                                            запусти relay для своего LAN-порта
                                         </p>
                                     </div>
                                 </header>
@@ -603,7 +603,7 @@
                                         &laquo;Открыть для сети&raquo; &rarr;
                                         запомни порт, введи его выше и нажми
                                         &laquo;Опубликовать&raquo; &mdash;
-                                        участники увидят твой IP:порт.
+                                        затем нажми «Запустить relay (хост)».
                                     </p>
                                 </div>
                             </article>
@@ -617,17 +617,17 @@
                             </summary>
                             <ol>
                                 <li>
-                                    Хост создаёт комнату и публикует свой
-                                    LAN-порт.
+                                    Хост открывает LAN-мир, вводит порт и жмёт
+                                    &laquo;Запустить relay (хост)&raquo;.
                                 </li>
                                 <li>
-                                    Участники подключаются по имени + паролю и
-                                    копируют IP:порт хоста.
+                                    Друг входит в эту же комнату и жмёт
+                                    &laquo;Подключить relay (игрок)&raquo;.
                                 </li>
                                 <li>
-                                    В Minecraft &rarr; &laquo;Сетевая
-                                    игра&raquo; &rarr; &laquo;Прямое
-                                    подключение&raquo; &rarr; вставить IP:порт.
+                                    Друг в Minecraft открывает &laquo;Прямое
+                                    подключение&raquo; и вводит
+                                    <kbd>127.0.0.1:25595</kbd>.
                                 </li>
                             </ol>
                         </details>
@@ -667,11 +667,32 @@
                                         Запустить relay (хост)
                                     </button>
                                     <button
+                                        id="network-relay-client-btn"
+                                        class="net-btn net-btn-ghost"
+                                    >
+                                        <i class="fas fa-plug-circle-bolt"></i>
+                                        Подключить relay (игрок)
+                                    </button>
+                                    <button
+                                        id="network-relay-copy-btn"
+                                        class="net-btn net-btn-ghost"
+                                    >
+                                        <i class="fas fa-copy"></i>
+                                        Копировать 127.0.0.1:25595
+                                    </button>
+                                    <button
+                                        id="network-relay-stop-client-btn"
+                                        class="net-btn net-btn-ghost"
+                                    >
+                                        <i class="fas fa-link-slash"></i>
+                                        Остановить relay игрока
+                                    </button>
+                                    <button
                                         id="network-relay-stop-btn"
                                         class="net-btn net-btn-ghost"
                                     >
                                         <i class="fas fa-stop"></i>
-                                        Остановить relay
+                                        Остановить relay хоста
                                     </button>
                                 </div>
                             </header>
@@ -697,7 +718,7 @@
                                     <input
                                         id="network-backend-url"
                                         type="text"
-                                        placeholder="https://2p2p.ru/launcher"
+                                        placeholder="https://2p2p.ru"
                                         autocomplete="off"
                                     />
                                 </label>
